@@ -44,7 +44,3 @@ variable "proxmox_api_token_secret" {
 }
 
 variable "ssh_public_key" { type = string }
-variable "ts_authkey" { 
-  type = string
-  sensitive = true 
- }
