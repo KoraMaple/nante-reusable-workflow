@@ -32,9 +32,13 @@ resource "proxmox_vm_qemu" "generic_vm" {
   cores  = var.vm_cpu_cores
   memory = var.vm_ram_mb
   disk {
+    slot = 0
     size = var.vm_disk_gb
+    type = "scsi"
+    storage = "zfs-vm"
   }
   network {
+    id = 0
     model  = "virtio"
     bridge = "vmbr0"
     tag    = var.vlan_tag
