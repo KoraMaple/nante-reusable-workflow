@@ -1,0 +1,4 @@
+---
+# Default values if not provided by GitHub
+target_hostname: "unnamed-vm"
+app_role_name: ""

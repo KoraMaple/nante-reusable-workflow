@@ -1,0 +1,92 @@
+name: "Reusable VM Provisioning"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        type: string
+        description: 'Application Name (e.g. nexus, k3s, octopus)'
+        required: true
+        default: 'app'
+      vlan_tag:
+        type: string
+        description: 'Network Zone'
+        default: '20'
+      vm_ip:
+        type: string
+        description: 'Target IP Address'
+        required: true
+      cpu_cores:
+        type: string
+        description: 'CPU Cores'
+        required: true
+        default: '2'
+      ram_mb:
+        type: string
+        description: 'RAM in MB'
+        required: true
+        default: '4096'
+      disk_gb:
+        type: string
+        description: 'Disk Size (e.g. 20G)'
+        required: true
+        default: '20G'
+      app_role_name:
+        type: string
+        description: 'Ansible Role to Apply (e.g. nexus_setup, k3s_setup)'
+        required: false
+        default: ''
+
+jobs:
+  provision:
+    runs-on: self-hosted
+    env:
+      PM_API_TOKEN_ID: ${{ secrets.PROXMOX_TOKEN_ID }}
+      PM_API_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Terraform Apply
+        run: |
+          cd terraform/
+          terraform init
+          
+          # Select or Create a workspace named after the app (e.g. "nexus" or "k3s")
+          terraform workspace select -or-create ${{ github.event.inputs.app_name }}
+          
+          terraform apply -auto-approve \
+            -var="app_name=${{ github.event.inputs.app_name }}" \
+            -var="vlan_tag=${{ github.event.inputs.vlan_tag }}" \
+            -var="vm_target_ip=${{ github.event.inputs.vm_ip }}" \
+            -var="vm_cpu_cores=${{ github.event.inputs.cpu_cores }}" \
+            -var="vm_ram_mb=${{ github.event.inputs.ram_mb }}" \
+            -var="vm_disk_gb=${{ github.event.inputs.disk_gb }}" \
+            -var="ssh_public_key=${{ secrets.ANS_SSH_PUBLIC_KEY }}"
+
+      - name: Wait for SSH to wake up
+        run: sleep 30
+
+      - name: Ansible Config
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }} #
+        run: |
+          # 1. Create the temporary SSH key from secrets
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa_temp
+          chmod 600 id_rsa_temp
+          
+          cd ansible/
+          
+          # 2. Run the playbook using the IP from the manual UI input
+          # We also pass the app_name so Ansible can set the OS hostname
+          ansible-playbook -i "${{ github.event.inputs.vm_ip }}," site.yml \
+            --user deploy \
+            --private-key ../id_rsa_temp \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ github.event.inputs.app_name }}" \
+            --extra-vars "vlan_zone=${{ github.event.inputs.vlan_tag }}"
+            --extra-vars "app_role_name=${{ github.event.inputs.app_role_name }}"
+
+          # 3. Clean up the sensitive key file
+          rm ../id_rsa_temp

@@ -1,0 +1,13 @@
+---
+- name: "Global Infrastructure Configuration"
+  hosts: all
+  become: true
+  vars:
+    # We pull the authkey from the environment variable set in GitHub Action
+    ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
+  
+  roles:
+    - role: base_setup
+    # This role only runs if you pass an app_role_name from GitHub
+    - role: "{{ app_role_name }}"
+      when: app_role_name is defined and app_role_name != ""

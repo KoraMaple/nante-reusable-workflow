@@ -1,0 +1,52 @@
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "telmate/proxmox"
+      version = "3.0.1"
+    }
+  }
+}
+
+resource "random_id" "vm_suffix" {
+  byte_length = 2
+}
+
+locals {
+  # Generates something like: k3s-prod-a1b2
+  vm_hostname = "${var.app_name}-${var.environment}-${random_id.vm_suffix.hex}"
+}
+
+locals {
+  # This splits the IP provided (e.g., 192.168.10.50) and replaces 
+  # the last part with .1 to find your gateway automatically.
+  # Alternatively, since you know the VLAN, we can just hardcode the prefix:
+  gateway = "192.168.${var.vlan_tag}.1"
+}
+
+resource "proxmox_vm_qemu" "generic_vm" {
+  name        = "${var.app_name}-vm"
+  target_node = "pve"
+  clone       = "ubuntu-2404-template"
+  full_clone  = true
+  
+  cores  = var.vm_cpu_cores
+  memory = var.vm_ram_mb
+  disk {
+    size = var.vm_disk_gb
+  }
+  network {
+    model  = "virtio"
+    bridge = "vmbr0"
+    tag    = var.vlan_tag
+  }
+
+  # Cloud-Init Injection
+  os_type    = "cloud-init"
+  ciuser     = "deploy"
+  ipconfig0 = "ip=${var.vm_ip}/24,gw=${local.gateway}"
+ 
+  # This pulls from your secret via the GitHub Action
+  sshkeys = <<EOF
+  ${var.ssh_public_key}
+  EOF
+}
