@@ -43,4 +43,7 @@ variable "proxmox_api_token_secret" {
   sensitive = true  # This prevents the secret from printing in logs
 }
 
-variable "ssh_public_key" { type = string }
+variable "ssh_public_key" { 
+  type = string
+  sensitive = true 
+}
