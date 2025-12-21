@@ -34,12 +34,14 @@ resource "proxmox_vm_qemu" "generic_vm" {
   clone       = "ubuntu-2404-template"
   full_clone  = true
   
-  cores  = var.vm_cpu_cores
+  cpu {
+    cores = var.vm_cpu_cores
+  }
   memory = var.vm_ram_mb
   disk {
-    slot = 0
+    slot = "scsi0"
     size = var.vm_disk_gb
-    type = "scsi"
+    type = "disk"
     storage = "zfs-vm"
   }
   network {
