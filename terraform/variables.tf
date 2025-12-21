@@ -33,3 +33,8 @@ variable "vlan_tag" {
   description = "The VLAN tag for the network interface"
   default     = 20
 }
+
+variable "ssh_public_key" {
+  type        = string
+  description = "The public SSH key to be injected into the VM via Cloud-Init"
+}
