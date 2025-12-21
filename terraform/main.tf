@@ -43,7 +43,7 @@ resource "proxmox_vm_qemu" "generic_vm" {
   # Cloud-Init Injection
   os_type    = "cloud-init"
   ciuser     = "deploy"
-  ipconfig0 = "ip=${var.vm_ip}/24,gw=${local.gateway}"
+  ipconfig0 = "ip=${var.vm_target_ip}/24,gw=${local.gateway}"
  
   # This pulls from your secret via the GitHub Action
   sshkeys = <<EOF
