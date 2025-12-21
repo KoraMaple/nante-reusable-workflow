@@ -34,7 +34,17 @@ variable "vlan_tag" {
   default     = 20
 }
 
-variable "ssh_public_key" {
-  type        = string
-  description = "The public SSH key to be injected into the VM via Cloud-Init"
+# These match the TF_VAR_ names we will set in Semaphore
+variable "proxmox_api_url" { type = string }
+variable "proxmox_api_token_id" { type = string }
+
+variable "proxmox_api_token_secret" { 
+  type      = string 
+  sensitive = true  # This prevents the secret from printing in logs
 }
+
+variable "ssh_public_key" { type = string }
+variable "ts_authkey" { 
+  type = string
+  sensitive = true 
+ }
