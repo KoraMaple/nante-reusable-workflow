@@ -46,16 +46,20 @@ resource "proxmox_vm_qemu" "generic_vm" {
     storage = "zfs-vm"
   }
   network {
-    id = 0
+    id     = 0
     model  = "virtio"
     bridge = "vmbr0"
-    tag    = var.vlan_tag
+    tag    = tonumber(var.vlan_tag)
   }
 
   # Cloud-Init Injection
   os_type    = "cloud-init"
   ciuser     = "deploy"
-  ipconfig0 = "ip=${var.vm_target_ip}/24,gw=${local.gateway}"
+  ipconfig0  = "ip=${var.vm_target_ip}/24,gw=${local.gateway}"
+  cicustom   = ""
+  
+  # Required: Cloud-init drive for IP configuration
+  cloudinit_cdrom_storage = "zfs-vm"
  
   # This pulls from your secret via the GitHub Action
   sshkeys = <<EOF
