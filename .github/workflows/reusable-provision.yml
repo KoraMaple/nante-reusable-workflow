@@ -94,8 +94,32 @@ jobs:
           cd terraform/
           terraform apply tfplan
 
-      - name: Wait for SSH to wake up
-        run: sleep 30
+      - name: Wait for VM to boot and SSH to be ready
+        run: |
+          echo "Waiting for VM at ${{ inputs.vm_target_ip }} to be reachable..."
+          
+          # Wait up to 2 minutes for the VM to respond
+          for i in {1..24}; do
+            if ping -c 1 -W 2 ${{ inputs.vm_target_ip }} &>/dev/null; then
+              echo "✓ VM is responding to ping"
+              break
+            fi
+            echo "Attempt $i/24: VM not yet reachable, waiting 5s..."
+            sleep 5
+          done
+          
+          # Wait for SSH port to be open
+          echo "Waiting for SSH port 22..."
+          for i in {1..12}; do
+            if nc -z -w 2 ${{ inputs.vm_target_ip }} 22 2>/dev/null; then
+              echo "✓ SSH port is open"
+              exit 0
+            fi
+            echo "Attempt $i/12: SSH not ready, waiting 5s..."
+            sleep 5
+          done
+          
+          echo "⚠️ SSH may not be ready, proceeding anyway..."
 
       - name: Ansible Config
         env:
