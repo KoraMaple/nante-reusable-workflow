@@ -120,6 +120,7 @@ func validateIP(ip, vlanTag string) error {
 	}
 
 	return nil
+}
 
 func run(cfg Config) error {
 	fmt.Printf("Running %s for %s...\n", cfg.Action, cfg.AppName)

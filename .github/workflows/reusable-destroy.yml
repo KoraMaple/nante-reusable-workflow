@@ -28,6 +28,10 @@ on:
         type: string
         description: 'Disk Size (e.g. 20G)'
         default: '20G'
+      vm_target_ip:
+        type: string
+        description: 'IP of the VM to destroy (must match VLAN subnet)'
+        required: true
 
 jobs:
   destroy:
@@ -53,13 +57,13 @@ jobs:
           TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
           TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
           TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
-          # Ensure state directory exists
-          mkdir -p /opt/terraform
+          # Ensure state directory exists (use home dir for runner permissions)
+          mkdir -p $HOME/.terraform-state
           
           cd terraform/
-          terraform init -backend-config="path=/opt/terraform/terraform.tfstate"
+          terraform init -backend-config="path=$HOME/.terraform-state/terraform.tfstate"
           
           # Select the app workspace
           terraform workspace select ${{ inputs.app_name }}
@@ -68,7 +72,7 @@ jobs:
           terraform plan -destroy \
             -var="app_name=${{ inputs.app_name }}" \
             -var="vlan_tag=${{ inputs.vlan_tag }}" \
-            -var="vm_target_ip=0.0.0.0" \
+            -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
             -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
             -var="vm_ram_mb=${{ inputs.ram_mb }}" \
             -var="vm_disk_gb=${{ inputs.disk_gb }}" \
@@ -79,7 +83,7 @@ jobs:
           TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
           TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
           TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
           cd terraform/
           terraform apply destroy_plan
