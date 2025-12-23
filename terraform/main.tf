@@ -31,7 +31,7 @@ locals {
 
 resource "proxmox_vm_qemu" "generic_vm" {
   name        = "${var.app_name}-vm"
-  target_node = "pve"
+  target_node = "pmx"
   clone       = "ubuntu-2404-template"
   full_clone  = true
   
