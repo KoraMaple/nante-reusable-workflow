@@ -36,9 +36,9 @@ resource "proxmox_vm_qemu" "generic_vm" {
   full_clone  = true
   
   cpu {
-    cores = var.vm_cpu_cores
+    cores = tonumber(var.vm_cpu_cores)
   }
-  memory = var.vm_ram_mb
+  memory = tonumber(var.vm_ram_mb)
   disk {
     slot = "scsi0"
     size = var.vm_disk_gb

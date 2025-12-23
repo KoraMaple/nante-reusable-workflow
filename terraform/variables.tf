@@ -13,13 +13,15 @@ variable "vm_target_ip" {
 }
 
 variable "vm_cpu_cores" {
-  type        = number
-  default     = 2
+  type        = string
+  default     = "2"
+  description = "Number of CPU cores (passed as string from GitHub Actions)"
 }
 
 variable "vm_ram_mb" {
-  type        = number
-  default     = 4096
+  type        = string
+  default     = "4096"
+  description = "RAM in MB (passed as string from GitHub Actions)"
 }
 
 variable "vm_disk_gb" {

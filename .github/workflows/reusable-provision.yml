@@ -45,6 +45,19 @@ jobs:
         with:
           repository: KoraMaple/nante-reusable-workflow
           ref: main
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Validate VLAN and IP Match
+        run: |
+          VLAN="${{ inputs.vlan_tag }}"
+          IP="${{ inputs.vm_target_ip }}"
+          EXPECTED_PREFIX="192.168.${VLAN}."
+          
+          if [[ ! "$IP" == ${EXPECTED_PREFIX}* ]]; then
+            echo "❌ Error: IP '$IP' does not match VLAN $VLAN (expected ${EXPECTED_PREFIX}x)"
+            exit 1
+          fi
+          echo "✓ VLAN $VLAN and IP $IP are valid"
 
       - name: Terraform Plan
         env:

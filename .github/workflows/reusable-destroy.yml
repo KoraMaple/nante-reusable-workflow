@@ -46,6 +46,7 @@ jobs:
         with:
           repository: KoraMaple/nante-reusable-workflow
           ref: main
+          token: ${{ secrets.GH_PAT }}
 
       - name: Confirm Destruction
         run: |
