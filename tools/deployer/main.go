@@ -7,6 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 // Config holds the configuration for the deployment
@@ -56,10 +59,67 @@ func main() {
 		StatePath: *statePath,
 	}
 
+	// Validate inputs
+	if err := validateConfig(cfg); err != nil {
+		log.Fatalf("Validation error: %v", err)
+	}
+
 	if err := run(cfg); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 }
+
+// validateConfig performs input validation
+func validateConfig(cfg Config) error {
+	// Validate VLAN tag
+	if cfg.VlanTag != "10" && cfg.VlanTag != "20" {
+		return fmt.Errorf("VLAN tag must be '10' (DMZ/production) or '20' (internal dev), got '%s'", cfg.VlanTag)
+	}
+
+	// Validate IP address matches VLAN subnet
+	if err := validateIP(cfg.VmIp, cfg.VlanTag); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateIP ensures IP matches the expected VLAN subnet
+func validateIP(ip, vlanTag string) error {
+	// Expected patterns based on VLAN
+	var expectedPattern string
+	switch vlanTag {
+	case "10":
+		expectedPattern = "^192\\.168\\.10\\.([0-9]{1,3})$"
+	case "20":
+		expectedPattern = "^192\\.168\\.20\\.([0-9]{1,3})$"
+	default:
+		return fmt.Errorf("unknown VLAN tag: %s", vlanTag)
+	}
+
+	// Check pattern
+	regex := regexp.MustCompile(expectedPattern)
+	matches := regex.FindStringSubmatch(ip)
+	if matches == nil {
+		vlanDesc := "internal dev"
+		if vlanTag == "10" {
+			vlanDesc = "DMZ/production"
+		}
+		return fmt.Errorf("IP %s does not match 192.168.%s.x pattern for VLAN %s (%s)", ip, vlanTag, vlanTag, vlanDesc)
+	}
+
+	// Validate third octet is in valid range (10-254)
+	lastOctet := matches[1]
+	octet, err := strconv.Atoi(lastOctet)
+	if err != nil {
+		return fmt.Errorf("invalid IP octet: %s", lastOctet)
+	}
+
+	if octet < 10 || octet > 254 {
+		return fmt.Errorf("IP octet must be between 10 and 254, got %d", octet)
+	}
+
+	return nil
 
 func run(cfg Config) error {
 	fmt.Printf("Running %s for %s...\n", cfg.Action, cfg.AppName)

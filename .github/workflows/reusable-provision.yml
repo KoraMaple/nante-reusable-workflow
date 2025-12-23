@@ -31,11 +31,6 @@ on:
         description: 'Disk Size (e.g. 20G)'
         required: true
         default: '20G'
-      app_role_name:
-        type: string
-        description: 'Ansible Role to Apply (e.g. nexus_setup, k3s_setup)'
-        required: false
-        default: ''
 
 jobs:
   provision:
@@ -55,6 +50,9 @@ jobs:
           TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
+          # Ensure state directory exists
+          mkdir -p /opt/terraform
+          
           cd terraform/
           terraform init -backend-config="path=/opt/terraform/terraform.tfstate"
           
@@ -65,9 +63,9 @@ jobs:
             -var="app_name=${{ inputs.app_name }}" \
             -var="vlan_tag=${{ inputs.vlan_tag }}" \
             -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
-            -var="cpu_cores=${{ inputs.cpu_cores }}" \
-            -var="ram_mb=${{ inputs.ram_mb }}" \
-            -var="disk_gb=${{ inputs.disk_gb }}" \
+            -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
+            -var="vm_ram_mb=${{ inputs.ram_mb }}" \
+            -var="vm_disk_gb=${{ inputs.disk_gb }}" \
             -out=tfplan
 
       - name: Terraform Apply
@@ -94,6 +92,13 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa_temp
           chmod 600 id_rsa_temp
           
+          # Validate SSH key format
+          if ! ssh-keygen -l -f id_rsa_temp &>/dev/null; then
+            echo "❌ SSH key validation failed"
+            rm id_rsa_temp
+            exit 1
+          fi
+          
           cd ansible/
           
           # Install requirements
@@ -107,7 +112,7 @@ jobs:
             --ssh-common-args='-o StrictHostKeyChecking=no' \
             --extra-vars "target_hostname=${{ inputs.app_name }}" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-            --extra-vars "app_role_name=${{ inputs.app_role_name }}"
+            --extra-vars "app_role_name=${{ inputs.app_name }}"
 
           # 3. Clean up the sensitive key file
           rm ../id_rsa_temp

@@ -36,7 +36,7 @@
     TS_AUTHKEY: "{{ ts_authkey }}"
   register: tailscale_result
   changed_when: "'Success' in tailscale_result.stdout"
-  
+
 - name: Install and Configure Grafana Alloy
   ansible.builtin.include_role:
     name: grafana.grafana.alloy
@@ -51,8 +51,25 @@
 
       prometheus.remote_write "openobserve" {
         endpoint {
-          # Use variables passed from GitHub Actions
           url = "http://{{ oo_host }}:5080/api/default/prometheus"
+          basic_auth {
+            username = "{{ oo_user }}"
+            password = "{{ oo_pass }}"
+          }
+        }
+      }
+
+      loki.source.file "system_logs" {
+        targets    = [
+          { __path__ = "/var/log/*.log" },
+          { __path__ = "/var/log/syslog" }
+        ]
+        forward_to = [loki.write.openobserve.receiver]
+      }
+
+      loki.write "openobserve" {
+        endpoint {
+          url = "http://{{ oo_host }}:5080/api/default/loki/api/v1/push"
           basic_auth {
             username = "{{ oo_user }}"
             password = "{{ oo_pass }}"

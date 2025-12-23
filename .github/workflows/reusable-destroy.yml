@@ -1,0 +1,87 @@
+name: "Reusable VM Destruction"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        type: string
+        description: 'Application Name (e.g. nexus, k3s, octopus)'
+        required: true
+      confirm_destroy:
+        type: boolean
+        description: 'Confirm destruction (set to true to actually destroy)'
+        required: true
+        default: false
+      vlan_tag:
+        type: string
+        description: 'Network Zone'
+        default: '20'
+      cpu_cores:
+        type: string
+        description: 'CPU Cores'
+        default: '2'
+      ram_mb:
+        type: string
+        description: 'RAM in MB'
+        default: '4096'
+      disk_gb:
+        type: string
+        description: 'Disk Size (e.g. 20G)'
+        default: '20G'
+
+jobs:
+  destroy:
+    runs-on: self-hosted
+    env:
+      PM_API_TOKEN_ID: ${{ secrets.PROXMOX_TOKEN_ID }}
+      PM_API_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Confirm Destruction
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "true" ]; then
+            echo "❌ Destruction aborted. Set 'confirm_destroy' to true to proceed."
+            exit 1
+          fi
+          echo "✓ Destruction confirmed for app: ${{ inputs.app_name }}"
+
+      - name: Terraform Destroy Plan
+        env:
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          # Ensure state directory exists
+          mkdir -p /opt/terraform
+          
+          cd terraform/
+          terraform init -backend-config="path=/opt/terraform/terraform.tfstate"
+          
+          # Select the app workspace
+          terraform workspace select ${{ inputs.app_name }}
+          
+          # Show what will be destroyed
+          terraform plan -destroy \
+            -var="app_name=${{ inputs.app_name }}" \
+            -var="vlan_tag=${{ inputs.vlan_tag }}" \
+            -var="vm_target_ip=0.0.0.0" \
+            -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
+            -var="vm_ram_mb=${{ inputs.ram_mb }}" \
+            -var="vm_disk_gb=${{ inputs.disk_gb }}" \
+            -out=destroy_plan
+
+      - name: Terraform Destroy
+        env:
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          cd terraform/
+          terraform apply destroy_plan
+          
+          echo "✓ VM '${{ inputs.app_name }}' has been destroyed."
