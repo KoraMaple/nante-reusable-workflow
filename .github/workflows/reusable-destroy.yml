@@ -59,11 +59,11 @@ jobs:
           TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
-          # Ensure state directory exists
-          mkdir -p /opt/terraform
+          # Ensure state directory exists (use home dir for runner permissions)
+          mkdir -p $HOME/.terraform-state
           
           cd terraform/
-          terraform init -backend-config="path=/opt/terraform/terraform.tfstate"
+          terraform init -backend-config="path=$HOME/.terraform-state/terraform.tfstate"
           
           # Select the app workspace
           terraform workspace select ${{ inputs.app_name }}
