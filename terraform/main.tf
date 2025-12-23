@@ -35,6 +35,9 @@ resource "proxmox_vm_qemu" "generic_vm" {
   clone       = "ubuntu-2404-template"
   full_clone  = true
   
+  # Enable QEMU guest agent
+  agent = 1
+  
   cpu {
     cores = tonumber(var.vm_cpu_cores)
   }
