@@ -26,10 +26,11 @@ jobs:
 
 ## Required Secrets
 
-Set these in your organization or repository settings:
+Set these in your **caller repository** (or at the organization level):
 
 | Secret | Description | Example |
 |--------|-------------|---------|
+| `GH_PAT` | **Required** - GitHub PAT with `repo` scope to checkout this private repo | (GitHub Personal Access Token) |
 | `PROXMOX_API_URL` | Proxmox API endpoint | `https://192.168.1.100:8006/api2/json` |
 | `PROXMOX_TOKEN_ID` | Proxmox API token ID | `root@pam!terraform` |
 | `PROXMOX_TOKEN_SECRET` | Proxmox API token secret | (generated in Proxmox) |
@@ -39,6 +40,16 @@ Set these in your organization or repository settings:
 | `OO_USER` | OpenObserve username | `admin@example.com` |
 | `OO_PASS` | OpenObserve password | (your OpenObserve password) |
 | `OO_HOST` | OpenObserve host/IP | `192.168.20.5` |
+
+### Creating the GH_PAT Secret
+
+1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)**
+2. Click **Generate new token (classic)**
+3. Give it a name like `nante-workflow-access`
+4. Select the `repo` scope (full control of private repositories)
+5. Generate and copy the token
+6. In your **caller repository**, go to **Settings → Secrets and variables → Actions**
+7. Click **New repository secret**, name it `GH_PAT`, paste the token
 
 ## Supported Application Roles
 
