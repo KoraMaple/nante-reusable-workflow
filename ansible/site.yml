@@ -5,6 +5,9 @@
   vars:
     # We pull the authkey from the environment variable set in GitHub Action
     ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
+    oo_user: "{{ lookup('env', 'OO_USER') }}"
+    oo_pass: "{{ lookup('env', 'OO_PASS') }}"
+    oo_host: "{{ lookup('env', 'OO_HOST') }}"
   
   roles:
     - role: base_setup

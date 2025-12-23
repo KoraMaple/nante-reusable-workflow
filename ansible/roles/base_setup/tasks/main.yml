@@ -36,4 +36,26 @@
     TS_AUTHKEY: "{{ ts_authkey }}"
   register: tailscale_result
   changed_when: "'Success' in tailscale_result.stdout"
-  # We use a variable here instead of lookup so it's easier to pass from GitHub
+  
+- name: Install and Configure Grafana Alloy
+  ansible.builtin.include_role:
+    name: grafana.grafana.alloy
+  vars:
+    alloy_config: |
+      prometheus.exporter.unix "default" {}
+
+      prometheus.scrape "metrics" {
+        targets    = prometheus.exporter.unix.default.targets
+        forward_to = [prometheus.remote_write.openobserve.receiver]
+      }
+
+      prometheus.remote_write "openobserve" {
+        endpoint {
+          # Use variables passed from GitHub Actions
+          url = "http://{{ oo_host }}:5080/api/default/prometheus"
+          basic_auth {
+            username = "{{ oo_user }}"
+            password = "{{ oo_pass }}"
+          }
+        }
+      }

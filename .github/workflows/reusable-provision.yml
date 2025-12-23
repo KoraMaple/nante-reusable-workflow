@@ -12,7 +12,7 @@ on:
         type: string
         description: 'Network Zone'
         default: '20'
-      vm_ip:
+      vm_target_ip:
         type: string
         description: 'Target IP Address'
         required: true
@@ -48,29 +48,47 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Terraform Apply
+      - name: Terraform Plan
+        env:
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
           cd terraform/
-          terraform init
+          terraform init -backend-config="path=/opt/terraform/terraform.tfstate"
           
-          # Select or Create a workspace named after the app (e.g. "nexus" or "k3s")
-          terraform workspace select -or-create ${{ github.event.inputs.app_name }}
+          # Select workspace or create it if it doesn't exist
+          terraform workspace select ${{ inputs.app_name }} || terraform workspace new ${{ inputs.app_name }}
           
-          terraform apply -auto-approve \
-            -var="app_name=${{ github.event.inputs.app_name }}" \
-            -var="vlan_tag=${{ github.event.inputs.vlan_tag }}" \
-            -var="vm_target_ip=${{ github.event.inputs.vm_ip }}" \
-            -var="vm_cpu_cores=${{ github.event.inputs.cpu_cores }}" \
-            -var="vm_ram_mb=${{ github.event.inputs.ram_mb }}" \
-            -var="vm_disk_gb=${{ github.event.inputs.disk_gb }}" \
-            -var="ssh_public_key=${{ secrets.ANS_SSH_PUBLIC_KEY }}"
+          terraform plan \
+            -var="app_name=${{ inputs.app_name }}" \
+            -var="vlan_tag=${{ inputs.vlan_tag }}" \
+            -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
+            -var="cpu_cores=${{ inputs.cpu_cores }}" \
+            -var="ram_mb=${{ inputs.ram_mb }}" \
+            -var="disk_gb=${{ inputs.disk_gb }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        env:
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
+        run: |
+          cd terraform/
+          terraform apply tfplan
 
       - name: Wait for SSH to wake up
         run: sleep 30
 
       - name: Ansible Config
         env:
-          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }} #
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+          OO_USER: ${{ secrets.OO_USER }}
+          OO_PASS: ${{ secrets.OO_PASS }}
+          OO_HOST: ${{ secrets.OO_HOST }}
         run: |
           # 1. Create the temporary SSH key from secrets
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa_temp
@@ -78,15 +96,18 @@ jobs:
           
           cd ansible/
           
+          # Install requirements
+          ansible-galaxy install -r requirements.yml
+          
           # 2. Run the playbook using the IP from the manual UI input
           # We also pass the app_name so Ansible can set the OS hostname
-          ansible-playbook -i "${{ github.event.inputs.vm_ip }}," site.yml \
+          ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
             --user deploy \
             --private-key ../id_rsa_temp \
             --ssh-common-args='-o StrictHostKeyChecking=no' \
-            --extra-vars "target_hostname=${{ github.event.inputs.app_name }}" \
-            --extra-vars "vlan_zone=${{ github.event.inputs.vlan_tag }}"
-            --extra-vars "app_role_name=${{ github.event.inputs.app_role_name }}"
+            --extra-vars "target_hostname=${{ inputs.app_name }}" \
+            --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+            --extra-vars "app_role_name=${{ inputs.app_role_name }}"
 
           # 3. Clean up the sensitive key file
           rm ../id_rsa_temp
