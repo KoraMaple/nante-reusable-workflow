@@ -69,8 +69,17 @@ jobs:
           cd terraform/
           terraform init -backend-config="path=$HOME/.terraform-state/terraform.tfstate"
           
-          # Select the app workspace
-          terraform workspace select ${{ inputs.app_name }}
+          # List available workspaces for debugging
+          echo "Available workspaces:"
+          terraform workspace list
+          
+          # Select the app workspace (fail if it doesn't exist - nothing to destroy)
+          if ! terraform workspace select ${{ inputs.app_name }} 2>/dev/null; then
+            echo "❌ Workspace '${{ inputs.app_name }}' does not exist."
+            echo "   This means no infrastructure was provisioned with this app name."
+            echo "   Available workspaces are listed above."
+            exit 1
+          fi
           
           # Show what will be destroyed
           terraform plan -destroy \
