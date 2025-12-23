@@ -50,11 +50,11 @@ jobs:
 
       - name: Setup Terraform State Directory
         run: |
-          # Use same fixed path as provision workflow
-          STATE_DIR="/home/gth-runner/.terraform-state"
-          sudo mkdir -p $STATE_DIR
-          sudo chown $(whoami):$(whoami) $STATE_DIR
+          # Use runner's home directory for state persistence
+          STATE_DIR="$HOME/.terraform-state"
+          mkdir -p $STATE_DIR
           echo "TERRAFORM_STATE_DIR=$STATE_DIR" >> $GITHUB_ENV
+          echo "Using state directory: $STATE_DIR"
 
       - name: Confirm Destruction
         run: |

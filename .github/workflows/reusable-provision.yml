@@ -49,12 +49,11 @@ jobs:
 
       - name: Setup Terraform State Directory
         run: |
-          # Use a fixed path accessible by all runners
-          # This ensures state persists across workflow runs
-          STATE_DIR="/home/gth-runner/.terraform-state"
-          sudo mkdir -p $STATE_DIR
-          sudo chown $(whoami):$(whoami) $STATE_DIR
+          # Use runner's home directory for state persistence
+          STATE_DIR="$HOME/.terraform-state"
+          mkdir -p $STATE_DIR
           echo "TERRAFORM_STATE_DIR=$STATE_DIR" >> $GITHUB_ENV
+          echo "Using state directory: $STATE_DIR"
 
       - name: Validate VLAN and IP Match
         run: |
