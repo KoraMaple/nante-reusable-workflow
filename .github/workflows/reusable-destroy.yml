@@ -41,8 +41,11 @@ jobs:
       PM_API_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
     
     steps:
-      - name: Checkout Code
+      - name: Checkout Reusable Workflow Repo
         uses: actions/checkout@v4
+        with:
+          repository: KoraMaple/nante-reusable-workflow
+          ref: main
 
       - name: Confirm Destruction
         run: |
