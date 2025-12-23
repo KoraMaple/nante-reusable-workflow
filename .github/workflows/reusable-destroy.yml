@@ -45,8 +45,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KoraMaple/nante-reusable-workflow
-          ref: main
+          ref: develop
           token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Terraform State Directory
+        run: |
+          # Use same fixed path as provision workflow
+          STATE_DIR="/home/gth-runner/.terraform-state"
+          sudo mkdir -p $STATE_DIR
+          sudo chown $(whoami):$(whoami) $STATE_DIR
+          echo "TERRAFORM_STATE_DIR=$STATE_DIR" >> $GITHUB_ENV
 
       - name: Confirm Destruction
         run: |
@@ -63,11 +71,8 @@ jobs:
           TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
-          # Ensure state directory exists (use home dir for runner permissions)
-          mkdir -p $HOME/.terraform-state
-          
           cd terraform/
-          terraform init -backend-config="path=$HOME/.terraform-state/terraform.tfstate"
+          terraform init -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate"
           
           # List available workspaces for debugging
           echo "Available workspaces:"
