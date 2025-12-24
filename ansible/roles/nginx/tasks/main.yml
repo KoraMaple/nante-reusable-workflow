@@ -33,5 +33,23 @@
     state: started
     enabled: yes
 
+- name: Install Nginx Prometheus Exporter
+  apt:
+    name: prometheus-nginx-exporter
+    state: present
+
+- name: Configure Nginx Prometheus Exporter
+  lineinfile:
+    path: /etc/default/prometheus-nginx-exporter
+    regexp: '^ARGS='
+    line: 'ARGS="-nginx.scrape-uri=http://127.0.0.1:8080/stub_status"'
+  notify: Restart Nginx Exporter
+
+- name: Ensure Nginx Exporter is started
+  service:
+    name: prometheus-nginx-exporter
+    state: started
+    enabled: yes
+
 - name: Force Nginx Restart if config changed
   meta: flush_handlers

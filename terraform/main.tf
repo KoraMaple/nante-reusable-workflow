@@ -70,8 +70,8 @@ resource "proxmox_vm_qemu" "generic_vm" {
   }
 
   # Ensure VM starts if node reboots
-  onboot = true
-
+  start_at_node_boot = true
+  
   # Cloud-Init Configuration
   os_type    = "cloud-init"
   ciuser     = "deploy"

@@ -98,26 +98,15 @@
         forward_to = [prometheus.remote_write.openobserve.receiver]
       }
 
-      // 1b. Collect Nginx Metrics
-      prometheus.exporter.nginx "nginx_metrics" {
-        address = "http://127.0.0.1:8080/stub_status"
-      }
-
-      // Add labels (hostname) to nginx metrics
-      discovery.relabel "nginx_metrics" {
-        targets = prometheus.exporter.nginx.nginx_metrics.targets
-        rule {
-          target_label = "instance"
-          replacement  = "{{ target_hostname }}"
-        }
-        rule {
-          target_label = "job"
-          replacement  = "nginx_metrics"
-        }
-      }
-
+      // 1b. Collect Nginx Metrics (via local exporter sidecar)
       prometheus.scrape "nginx" {
-        targets    = discovery.relabel.nginx_metrics.output
+        targets = [
+          {
+            __address__ = "127.0.0.1:9113",
+            instance    = "{{ target_hostname }}",
+            job         = "nginx_metrics",
+          },
+        ]
         forward_to = [prometheus.remote_write.openobserve.receiver]
       }
 
