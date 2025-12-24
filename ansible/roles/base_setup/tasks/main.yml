@@ -123,34 +123,38 @@
       // 2. Collect System Logs
       local.file_match "system_logs" {
         path_targets = [
-          { "__path__" = "/var/log/*.log" },
-          { "__path__" = "/var/log/syslog" },
+          {
+            __path__ = "/var/log/*.log",
+            host     = "{{ target_hostname }}",
+            job      = "system",
+          },
+          {
+            __path__ = "/var/log/syslog",
+            host     = "{{ target_hostname }}",
+            job      = "system",
+          },
         ]
       }
 
       loki.source.file "system_scrape" {
         targets    = local.file_match.system_logs.targets
         forward_to = [loki.write.openobserve.receiver]
-        labels     = {
-          host = "{{ target_hostname }}",
-          job  = "system",
-        }
       }
 
       // 3. Collect Nginx Logs
       local.file_match "nginx_logs" {
         path_targets = [
-          { "__path__" = "/var/log/nginx/*.log" },
+          {
+            __path__ = "/var/log/nginx/*.log",
+            host     = "{{ target_hostname }}",
+            job      = "nginx",
+          },
         ]
       }
 
       loki.source.file "nginx_scrape" {
         targets    = local.file_match.nginx_logs.targets
         forward_to = [loki.write.openobserve.receiver]
-        labels     = {
-          host = "{{ target_hostname }}",
-          job  = "nginx",
-        }
       }
 
       loki.write "openobserve" {
