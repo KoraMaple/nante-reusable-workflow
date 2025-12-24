@@ -101,6 +101,27 @@ jobs:
 3. **Terraform Destroy** – Removes VM from Proxmox
 4. **State Cleanup** – Removes Terraform state file
 
+## Observability (Metrics & Logs)
+
+The `base_setup` role automatically installs and configures **Grafana Alloy** to collect observability data and send it to your OpenObserve instance.
+
+### What is Collected?
+1.  **System Metrics:** CPU, Memory, Disk usage, and Load averages (via `node_exporter` integration).
+2.  **System Logs:** `/var/log/*.log` and `/var/log/syslog`.
+3.  **Nginx Metrics:** Request counts, active connections, and status (via `stub_status`).
+4.  **Nginx Logs:** Access and error logs from `/var/log/nginx/*.log`.
+
+### Data Labels
+All data is tagged with consistent labels for easy filtering:
+*   `host` / `instance`: The VM hostname (e.g., `nginx-prod-a1b2`)
+*   `job`: The source service (e.g., `node_exporter`, `nginx`, `system`, `nginx_metrics`)
+
+## Terraform State Management
+
+This workflow handles Terraform state persistence automatically.
+*   **Provision:** Creates a dedicated workspace for your app (e.g., `nginx`) and stores the state in the runner's persistent storage.
+*   **Destroy:** Retrieves the existing state from the persistent storage to cleanly destroy resources.
+
 ## Architecture
 
 ```
@@ -116,7 +137,9 @@ Ansible (configures OS + app)
     ↓
 Tailscale (joins mesh network)
     ↓
-Grafana Alloy (sends metrics/logs to OpenObserve)
+Grafana Alloy (collects & forwards data)
+    ↓       ↘
+OpenObserve (Metrics)   OpenObserve (Logs)
 ```
 
 ## Networking
