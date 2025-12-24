@@ -16,6 +16,8 @@
       - curl
       - apt-transport-https
       - ca-certificates
+      - gpg
+      - unzip
     state: present
     update_cache: yes
 
@@ -37,6 +39,23 @@
   register: tailscale_result
   changed_when: "'Success' in tailscale_result.stdout"
 
+- name: Debug OpenObserve Connection Vars
+  debug:
+    msg: "Connecting to OpenObserve at {{ oo_host }} with user {{ oo_user }}"
+
+- name: Fail if OpenObserve Host is missing
+  fail:
+    msg: "OO_HOST is not defined. Cannot configure Grafana Alloy."
+  when: oo_host is not defined or oo_host | length == 0
+
+- name: Create alloy user with log permissions
+  user:
+    name: alloy
+    system: yes
+    groups: adm
+    append: yes
+    state: present
+
 - name: Install and Configure Grafana Alloy
   ansible.builtin.include_role:
     name: grafana.grafana.alloy
@@ -53,8 +72,8 @@
         endpoint {
           url = "http://{{ oo_host }}:5080/api/default/prometheus"
           basic_auth {
-            username = "{{ oo_user }}"
-            password = "{{ oo_pass }}"
+            username = {{ oo_user | to_json }}
+            password = {{ oo_pass | to_json }}
           }
         }
       }
@@ -71,8 +90,8 @@
         endpoint {
           url = "http://{{ oo_host }}:5080/api/default/loki/api/v1/push"
           basic_auth {
-            username = "{{ oo_user }}"
-            password = "{{ oo_pass }}"
+            username = {{ oo_user | to_json }}
+            password = {{ oo_pass | to_json }}
           }
         }
       }
