@@ -98,21 +98,9 @@
         forward_to = [prometheus.remote_write.openobserve.receiver]
       }
 
-      // 1b. Collect Nginx Metrics (via local exporter sidecar)
-      prometheus.scrape "nginx" {
-        targets = [
-          {
-            __address__ = "127.0.0.1:9113",
-            instance    = "{{ target_hostname }}",
-            job         = "nginx_metrics",
-          },
-        ]
-        forward_to = [prometheus.remote_write.openobserve.receiver]
-      }
-
       prometheus.remote_write "openobserve" {
         endpoint {
-          url = "http://{{ oo_host }}:5080/api/default/prometheus"
+          url = "http://{{ oo_host }}:5080/api/default/prometheus/api/v1/write"
           basic_auth {
             username = {{ oo_user | to_json }}
             password = {{ oo_pass | to_json }}
@@ -138,22 +126,6 @@
 
       loki.source.file "system_scrape" {
         targets    = local.file_match.system_logs.targets
-        forward_to = [loki.write.openobserve.receiver]
-      }
-
-      // 3. Collect Nginx Logs
-      local.file_match "nginx_logs" {
-        path_targets = [
-          {
-            __path__ = "/var/log/nginx/*.log",
-            host     = "{{ target_hostname }}",
-            job      = "nginx",
-          },
-        ]
-      }
-
-      loki.source.file "nginx_scrape" {
-        targets    = local.file_match.nginx_logs.targets
         forward_to = [loki.write.openobserve.receiver]
       }
 
