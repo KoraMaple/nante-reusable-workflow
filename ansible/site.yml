@@ -7,8 +7,8 @@
     ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
     oo_user: "{{ lookup('env', 'OO_USER') }}"
     oo_pass: "{{ lookup('env', 'OO_PASS') }}"
-    # Sanitize OO_HOST to ensure it's just the IP/Hostname (strip http:// or https://)
-    oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') }}"
+    # Sanitize OO_HOST to ensure it's just the IP/Hostname (strip http://, https://, and :port)
+    oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') | regex_replace(':[0-9]+$', '') }}"
   
   roles:
     - role: base_setup

@@ -18,6 +18,7 @@
       - ca-certificates
       - gpg
       - unzip
+      - rsyslog
     state: present
     update_cache: yes
 
@@ -56,9 +57,24 @@
     append: yes
     state: present
 
-- name: Install and Configure Grafana Alloy
-  ansible.builtin.include_role:
-    name: grafana.grafana.alloy
+- name: Install and Configure Grafana Alloy with Debugging
+  block:
+    - name: Include Alloy Role
+      ansible.builtin.include_role:
+        name: grafana.grafana.alloy
+  rescue:
+    - name: Get Alloy Service Logs
+      command: journalctl -u alloy -n 50 --no-pager
+      register: alloy_logs
+      ignore_errors: true
+
+    - name: Print Alloy Logs
+      debug:
+        var: alloy_logs.stdout_lines
+
+    - name: Fail execution
+      fail:
+        msg: "Alloy failed to start. See logs above for details."
   vars:
     alloy_config: |
       prometheus.exporter.unix "default" {}
