@@ -72,7 +72,9 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
           cd terraform/
-          terraform init -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate"
+          terraform init \
+            -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate" \
+            -backend-config="workspace_dir=$TERRAFORM_STATE_DIR/terraform.tfstate.d"
           
           # List available workspaces for debugging
           echo "Available workspaces:"

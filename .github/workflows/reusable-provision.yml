@@ -75,7 +75,9 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
         run: |
           cd terraform/
-          terraform init -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate"
+          terraform init \
+            -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate" \
+            -backend-config="workspace_dir=$TERRAFORM_STATE_DIR/terraform.tfstate.d"
           
           # Select workspace or create it if it doesn't exist
           terraform workspace select ${{ inputs.app_name }} || terraform workspace new ${{ inputs.app_name }}
