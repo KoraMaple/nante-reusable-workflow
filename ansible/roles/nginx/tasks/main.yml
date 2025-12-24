@@ -11,8 +11,33 @@
     dest: /var/www/html/index.html
     mode: '0644'
 
+- name: Enable Nginx stub_status metrics
+  copy:
+    content: |
+      server {
+          listen 127.0.0.1:8080;
+          location /stub_status {
+              stub_status on;
+              access_log off;
+              allow 127.0.0.1;
+              deny all;
+          }
+      }
+    dest: /etc/nginx/conf.d/status.conf
+    mode: '0644'
+  notify: Restart Nginx
+
 - name: Ensure Nginx is started
   service:
     name: nginx
     state: started
     enabled: yes
+
+- name: Force Nginx Restart if config changed
+  meta: flush_handlers
+
+handlers:
+  - name: Restart Nginx
+    service:
+      name: nginx
+      state: restarted
