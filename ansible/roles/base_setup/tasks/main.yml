@@ -22,7 +22,7 @@
 - name: Ensure QEMU Guest Agent is running
   service:
     name: qemu-guest-agent
-    state: started
+    state: restarted
     enabled: yes
 
 - name: Install Tailscale

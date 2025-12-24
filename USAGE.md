@@ -132,8 +132,13 @@ Grafana Alloy (sends metrics/logs to OpenObserve)
 - Check that there are no extra whitespace or line breaks
 
 ### Ansible Connection Timeout
-- Verify VM booted successfully (increase wait time if needed)
+- **Most Common Cause:** IP address mismatch between cloud-init static IP and Terraform output
+- Verify VM booted successfully in Proxmox console
+- Check cloud-init logs: `ssh -i your_key deploy@<vm_ip> 'sudo cloud-init status --long'`
+- Verify network connectivity: `ping <vm_ip>` from the GitHub runner
 - Check SSH connectivity: `ssh -i your_key deploy@<vm_ip>`
+- Ensure the IP address is not already in use on your network
+- Verify VLAN configuration matches your network setup
 
 ### Tailscale Connection Failed
 - Verify `TS_AUTHKEY` is still valid

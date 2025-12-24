@@ -60,7 +60,7 @@ The workflows are designed as composable building blocks. Calling repositories p
 
 ## Integration Points
 
--   **Proxmox:** Target environment. Requires `target_node = "pve"` and `storage = "zfs-vm"`.
+-   **Proxmox:** Target environment. Requires `target_node = "pmx"` and `storage = "zfs-vm"`.
 -   **Tailscale:** **Primary Networking Layer.** All built VMs/LXCs are accessed exclusively via Tailscale.
 -   **GitHub Secrets:** Source of truth for secrets. Workflows should fetch secrets from GitHub Secrets before passing them to tools.
 -   **Nexus/Octopus:** **Active Services.** Nexus is the artifact repository. Octopus Deploy is configured to pull artifacts from Nexus feeds. Workflows should focus on pushing artifacts to Nexus and triggering Octopus releases.

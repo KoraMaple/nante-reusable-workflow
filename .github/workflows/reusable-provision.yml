@@ -103,28 +103,54 @@ jobs:
         run: |
           echo "Waiting for VM at ${{ inputs.vm_target_ip }} to be reachable..."
           
-          # Wait up to 2 minutes for the VM to respond
-          for i in {1..24}; do
+          # Wait up to 3 minutes for the VM to respond to ping
+          PING_SUCCESS=false
+          for i in {1..36}; do
             if ping -c 1 -W 2 ${{ inputs.vm_target_ip }} &>/dev/null; then
-              echo "✓ VM is responding to ping"
+              echo "✓ VM is responding to ping (attempt $i)"
+              PING_SUCCESS=true
               break
             fi
-            echo "Attempt $i/24: VM not yet reachable, waiting 5s..."
+            echo "Attempt $i/36: VM not yet reachable, waiting 5s..."
             sleep 5
           done
           
-          # Wait for SSH port to be open
+          if [ "$PING_SUCCESS" = false ]; then
+            echo "❌ ERROR: VM did not respond to ping after 3 minutes"
+            echo "Check that:"
+            echo "  1. VM was created successfully in Proxmox"
+            echo "  2. Cloud-init completed (check VM console)"
+            echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+            echo "  4. IP ${{ inputs.vm_target_ip }} is not already in use"
+            exit 1
+          fi
+          
+          # Wait for SSH port to be open (up to 2 minutes)
           echo "Waiting for SSH port 22..."
-          for i in {1..12}; do
+          SSH_SUCCESS=false
+          for i in {1..24}; do
             if nc -z -w 2 ${{ inputs.vm_target_ip }} 22 2>/dev/null; then
-              echo "✓ SSH port is open"
-              exit 0
+              echo "✓ SSH port is open (attempt $i)"
+              SSH_SUCCESS=true
+              break
             fi
-            echo "Attempt $i/12: SSH not ready, waiting 5s..."
+            echo "Attempt $i/24: SSH not ready, waiting 5s..."
             sleep 5
           done
           
-          echo "⚠️ SSH may not be ready, proceeding anyway..."
+          if [ "$SSH_SUCCESS" = false ]; then
+            echo "❌ ERROR: SSH port did not open after 2 minutes"
+            echo "Check that:"
+            echo "  1. Cloud-init completed successfully"
+            echo "  2. SSH service is running on the VM"
+            echo "  3. Firewall is not blocking port 22"
+            exit 1
+          fi
+          
+          # Additional wait for cloud-init to fully complete
+          echo "Waiting 15s for cloud-init to complete..."
+          sleep 15
+          echo "✓ VM is ready for Ansible configuration"
 
       - name: Ansible Config
         env:
@@ -137,12 +163,38 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa_temp
           chmod 600 id_rsa_temp
           
+          # 2. Validate SSH key format
+          if ! ssh-keygen -l -f id_rsa_temp &>/dev/null; then
+            echo "❌ ERROR: SSH_PRIVATE_KEY is not a valid SSH private key"
+            echo "Check that the secret contains the complete key including headers/footers"
+            rm id_rsa_temp
+            exit 1
+          fi
+          echo "✓ SSH private key validated"
+          
           cd ansible/
           
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # 2. Run the playbook using the IP from the manual UI input
+          # 3. Test Ansible connectivity before running playbook
+          echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }}..."
+          if ! ansible all -i "${{ inputs.vm_target_ip }}," -m ping \
+            --user deploy \
+            --private-key ../id_rsa_temp \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+            echo "❌ ERROR: Ansible cannot connect to VM"
+            echo "Attempting direct SSH test..."
+            ssh -i ../id_rsa_temp \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              deploy@${{ inputs.vm_target_ip }} "echo 'SSH connection successful'" || true
+            rm ../id_rsa_temp
+            exit 1
+          fi
+          echo "✓ Ansible connectivity confirmed"
+          
+          # 4. Run the playbook using the IP from the manual UI input
           # We also pass the app_name so Ansible can set the OS hostname
           ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
             --user deploy \
@@ -152,5 +204,5 @@ jobs:
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}"
 
-          # 3. Clean up the sensitive key file
+          # 5. Clean up the sensitive key file
           rm ../id_rsa_temp

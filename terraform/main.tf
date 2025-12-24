@@ -35,6 +35,9 @@ resource "proxmox_vm_qemu" "generic_vm" {
   clone       = "ubuntu-2404-template"
   full_clone  = true
   
+  # Use VirtIO SCSI for better performance
+  scsihw = "virtio-scsi-pci"
+  
   # Enable QEMU guest agent
   agent = 1
   
@@ -59,20 +62,32 @@ resource "proxmox_vm_qemu" "generic_vm" {
   }
   
   network {
-    id     = 0
-    model  = "virtio"
-    bridge = "vmbr0"
-    tag    = tonumber(var.vlan_tag)
+    id       = 0
+    model    = "virtio"
+    bridge   = "vmbr0"
+    tag      = tonumber(var.vlan_tag)
+    firewall = false
   }
+
+  # Ensure VM starts if node reboots
+  onboot = true
 
   # Cloud-Init Configuration
   os_type    = "cloud-init"
   ciuser     = "deploy"
+  ciupgrade  = false
   ipconfig0  = "ip=${var.vm_target_ip}/24,gw=${local.gateway}"
   nameserver = "192.168.${var.vlan_tag}.1"
  
-  # This pulls from your secret via the GitHub Action
-  sshkeys = <<EOF
-  ${var.ssh_public_key}
-  EOF
+  # Important: trimspace ensures no leading/trailing whitespace breaks the key
+  sshkeys = trimspace(var.ssh_public_key)
+  
+  # Ensure correct boot order
+  boot = "order=scsi0;ide2;net0"
+  
+  # Serial console is often required for cloud-init to finish successfully on Proxmox
+  serial {
+    id   = 0
+    type = "socket"
+  }
 }
