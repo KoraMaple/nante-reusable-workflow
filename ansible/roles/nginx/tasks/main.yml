@@ -35,9 +35,3 @@
 
 - name: Force Nginx Restart if config changed
   meta: flush_handlers
-
-handlers:
-  - name: Restart Nginx
-    service:
-      name: nginx
-      state: restarted
