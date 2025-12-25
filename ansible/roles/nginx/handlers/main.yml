@@ -8,3 +8,8 @@
   service:
     name: prometheus-nginx-exporter
     state: restarted
+
+- name: Restart Alloy
+  service:
+    name: alloy
+    state: restarted
