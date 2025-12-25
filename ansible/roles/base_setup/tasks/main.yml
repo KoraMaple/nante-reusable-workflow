@@ -40,11 +40,11 @@
   register: tailscale_result
   changed_when: "'Success' in tailscale_result.stdout"
 
-- name: Debug OpenObserve Connection Vars
+- name: Debug Observability Connection Vars
   debug:
-    msg: "Connecting to OpenObserve at {{ oo_host }} with user {{ oo_user }}"
+    msg: "Connecting to Observability Stack at {{ oo_host }}"
 
-- name: Fail if OpenObserve Host is missing
+- name: Fail if Observability Host is missing
   fail:
     msg: "OO_HOST is not defined. Cannot configure Grafana Alloy."
   when: oo_host is not defined or oo_host | length == 0
@@ -95,16 +95,12 @@
 
       prometheus.scrape "metrics" {
         targets    = discovery.relabel.system_metrics.output
-        forward_to = [prometheus.remote_write.openobserve.receiver]
+        forward_to = [prometheus.remote_write.grafana_stack.receiver]
       }
 
-      prometheus.remote_write "openobserve" {
+      prometheus.remote_write "grafana_stack" {
         endpoint {
-          url = "http://{{ oo_host }}:5080/api/default/prometheus/api/v1/write"
-          basic_auth {
-            username = {{ oo_user | to_json }}
-            password = {{ oo_pass | to_json }}
-          }
+          url = "http://{{ oo_host }}:9090/api/v1/write"
         }
       }
 
@@ -126,15 +122,11 @@
 
       loki.source.file "system_scrape" {
         targets    = local.file_match.system_logs.targets
-        forward_to = [loki.write.openobserve.receiver]
+        forward_to = [loki.write.grafana_stack.receiver]
       }
 
-      loki.write "openobserve" {
+      loki.write "grafana_stack" {
         endpoint {
-          url = "http://{{ oo_host }}:5080/api/default/loki/api/v1/push"
-          basic_auth {
-            username = {{ oo_user | to_json }}
-            password = {{ oo_pass | to_json }}
-          }
+          url = "http://{{ oo_host }}:3100/loki/api/v1/push"
         }
       }
