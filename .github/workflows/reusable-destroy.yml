@@ -63,14 +63,27 @@ jobs:
           fi
           echo "✓ Destruction confirmed for app: ${{ inputs.app_name }}"
 
-      - name: Terraform Init
-        uses: ./.github/actions/terraform-init
-        with:
-          workspace: ${{ inputs.app_name }}
-      
-      - name: Verify Workspace Exists
+      - name: Terraform Destroy with Doppler
         run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
           cd terraform/
+          
+          # Set AWS credentials for Terraform S3 backend
+          export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+          export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+          
+          # Terraform Init
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config='endpoints={s3="http://192.168.20.10:9000"}' \
+            -backend-config="access_key=$MINIO_ROOT_USER" \
+            -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
+          
+          # Select workspace
+          terraform workspace select ${{ inputs.app_name }}
+          
           # List available workspaces for debugging
           echo "Available workspaces:"
           terraform workspace list
@@ -80,19 +93,16 @@ jobs:
           if [ "$CURRENT_WS" != "${{ inputs.app_name }}" ]; then
             echo "❌ Workspace '${{ inputs.app_name }}' does not exist."
             echo "   This means no infrastructure was provisioned with this app name."
-            echo "   Available workspaces are listed above."
             exit 1
           fi
-
-      - name: Terraform Destroy Plan
-        env:
-          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
-        run: |
-          cd terraform/
-          # Show what will be destroyed
+          
+          # Set Proxmox credentials
+          export TF_VAR_proxmox_api_url="$PROXMOX_API_URL"
+          export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
+          export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
+          export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
+          
+          # Terraform Destroy Plan
           terraform plan -destroy \
             -var="app_name=${{ inputs.app_name }}" \
             -var="vlan_tag=${{ inputs.vlan_tag }}" \
@@ -101,17 +111,9 @@ jobs:
             -var="vm_ram_mb=${{ inputs.ram_mb }}" \
             -var="vm_disk_gb=${{ inputs.disk_gb }}" \
             -out=destroy_plan
-
-      - name: Terraform Destroy
-        env:
-          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ env.MINIO_ROOT_USER }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.MINIO_ROOT_PASSWORD }}
-        run: |
-          cd terraform/
+          
+          # Terraform Destroy
           terraform apply destroy_plan
           
           echo "✓ VM '${{ inputs.app_name }}' has been destroyed."
+          EOF

@@ -43,15 +43,34 @@ jobs:
         with:
           doppler_token: ${{ secrets.DOPPLER_TOKEN }}
 
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
-
-      - name: Run Ansible
-        uses: ./.github/actions/ansible-run
-        with:
-          target_ip: ${{ inputs.target_ip }}
-          ssh_user: ${{ inputs.ssh_user }}
-          target_hostname: ${{ inputs.target_hostname }}
-          app_role: ${{ inputs.app_role }}
+      - name: Run Ansible with Doppler
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Setup SSH agent with key from Doppler
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          # Install requirements
+          ansible-galaxy install -r requirements.yml
+          
+          # Test connectivity
+          echo "Testing Ansible connectivity to ${{ inputs.target_ip }}..."
+          if ! ansible all -i "${{ inputs.target_ip }}," -m ping \
+            --user "${{ inputs.ssh_user }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+            echo "❌ ERROR: Ansible cannot connect to VM at ${{ inputs.target_ip }}"
+            exit 1
+          fi
+          echo "✓ Ansible connectivity confirmed"
+          
+          # Run playbook
+          ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
+            --user "${{ inputs.ssh_user }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
+            --extra-vars "app_role_name=${{ inputs.app_role }}"
+          EOF

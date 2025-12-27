@@ -88,21 +88,41 @@ jobs:
           fi
           echo "✓ VLAN $VLAN and IP $IP are valid"
 
-      - name: Terraform Init
+      - name: Terraform Init, Plan, and Apply
         if: ${{ inputs.skip_terraform != true }}
-        uses: ./.github/actions/terraform-init
-        with:
-          workspace: ${{ inputs.app_name }}
-
-      - name: Terraform Plan
-        if: ${{ inputs.skip_terraform != true }}
-        env:
-          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
         run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Verify credentials are available
+          if [ -z "$MINIO_ROOT_USER" ] || [ -z "$MINIO_ROOT_PASSWORD" ]; then
+            echo "❌ ERROR: MINIO_ROOT_USER or MINIO_ROOT_PASSWORD not found in environment"
+            exit 1
+          fi
+          
           cd terraform/
+          
+          # Set AWS credentials for Terraform S3 backend
+          export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+          export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+          
+          # Terraform Init
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config='endpoints={s3="http://192.168.20.10:9000"}' \
+            -backend-config="access_key=$MINIO_ROOT_USER" \
+            -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
+          
+          # Select workspace
+          terraform workspace select ${{ inputs.app_name }} || terraform workspace new ${{ inputs.app_name }}
+          
+          # Set Proxmox credentials
+          export TF_VAR_proxmox_api_url="$PROXMOX_API_URL"
+          export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
+          export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
+          export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
+          
+          # Terraform Plan
           terraform plan \
             -var="app_name=${{ inputs.app_name }}" \
             -var="vlan_tag=${{ inputs.vlan_tag }}" \
@@ -114,19 +134,10 @@ jobs:
             -var="proxmox_storage=${{ inputs.proxmox_storage }}" \
             -var="vm_template=${{ inputs.vm_template }}" \
             -out=tfplan
-
-      - name: Terraform Apply
-        if: ${{ inputs.skip_terraform != true }}
-        env:
-          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ env.MINIO_ROOT_USER }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.MINIO_ROOT_PASSWORD }}
-        run: |
-          cd terraform/
+          
+          # Terraform Apply
           terraform apply tfplan
+          EOF
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
@@ -181,16 +192,35 @@ jobs:
           sleep 15
           echo "✓ VM is ready for Ansible configuration"
 
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
-
-      - name: Run Ansible
-        uses: ./.github/actions/ansible-run
-        with:
-          target_ip: ${{ inputs.vm_target_ip }}
-          ssh_user: deploy
-          target_hostname: ${{ inputs.app_name }}
-          app_role: ${{ inputs.app_name }}
-          vlan_tag: ${{ inputs.vlan_tag }}
+      - name: Run Ansible with Doppler
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Setup SSH agent with key from Doppler
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          # Install requirements
+          ansible-galaxy install -r requirements.yml
+          
+          # Test connectivity
+          echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }}..."
+          if ! ansible all -i "${{ inputs.vm_target_ip }}," -m ping \
+            --user deploy \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+            echo "❌ ERROR: Ansible cannot connect to VM"
+            exit 1
+          fi
+          echo "✓ Ansible connectivity confirmed"
+          
+          # Run playbook
+          ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
+            --user deploy \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ inputs.app_name }}" \
+            --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+            --extra-vars "app_role_name=${{ inputs.app_name }}"
+          EOF
