@@ -1,0 +1,50 @@
+---
+# Bootstrap playbook for existing infrastructure
+# Run this ONCE to create deploy user and setup SSH access
+# Usage: ansible-playbook -i "IP," bootstrap.yml --user root --ask-pass
+
+- name: Bootstrap Deploy User
+  hosts: all
+  become: yes
+  gather_facts: no
+  
+  vars:
+    deploy_user: deploy
+    deploy_ssh_public_key: "{{ lookup('env', 'ANS_SSH_PUBLIC_KEY') }}"
+  
+  tasks:
+    - name: Ensure deploy user exists
+      user:
+        name: "{{ deploy_user }}"
+        state: present
+        shell: /bin/bash
+        create_home: yes
+        groups: sudo
+        append: yes
+    
+    - name: Allow passwordless sudo for deploy user
+      copy:
+        content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ deploy_user }}"
+        mode: '0440'
+        validate: 'visudo -cf %s'
+    
+    - name: Ensure .ssh directory exists
+      file:
+        path: "/home/{{ deploy_user }}/.ssh"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0700'
+    
+    - name: Add SSH public key to authorized_keys
+      authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ deploy_ssh_public_key }}"
+        state: present
+    
+    - name: Test sudo access
+      command: sudo -n true
+      become: yes
+      become_user: "{{ deploy_user }}"
+      changed_when: false

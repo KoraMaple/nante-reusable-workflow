@@ -76,6 +76,59 @@ In addition to the Doppler secrets above, you must also configure these GitHub S
 6. In your **caller repository**, go to **Settings → Secrets and variables → Actions**
 7. Click **New repository secret**, name it `GH_PAT`, paste the token
 
+## Bootstrapping Existing Infrastructure
+
+If you have existing VMs that don't have the `deploy` user and SSH key configured, you need to bootstrap them first.
+
+### Option 1: Manual Bootstrap (Quickest)
+
+SSH into the VM as root/admin and run:
+
+```bash
+# Create deploy user
+sudo useradd -m -s /bin/bash deploy
+sudo usermod -aG sudo deploy
+
+# Allow passwordless sudo
+echo "deploy ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deploy
+
+# Setup SSH directory
+sudo mkdir -p /home/deploy/.ssh
+sudo chmod 700 /home/deploy/.ssh
+
+# Add your public key (get from Doppler ANS_SSH_PUBLIC_KEY)
+echo "YOUR_PUBLIC_KEY_HERE" | sudo tee /home/deploy/.ssh/authorized_keys
+sudo chmod 600 /home/deploy/.ssh/authorized_keys
+sudo chown -R deploy:deploy /home/deploy/.ssh
+```
+
+### Option 2: Bootstrap Workflow (Automated)
+
+Use the `reusable-bootstrap` workflow to automate the process:
+
+1. **Add bootstrap password to Doppler**: Create a secret like `BOOTSTRAP_SSH_PASSWORD` with the root/admin password
+2. **Call the bootstrap workflow**:
+
+```yaml
+jobs:
+  bootstrap:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-bootstrap.yml@develop
+    with:
+      target_ip: "192.168.20.150"
+      ssh_user: "root"  # or your existing admin user
+      ssh_password_secret_name: "BOOTSTRAP_SSH_PASSWORD"
+    secrets: inherit
+```
+
+3. **After bootstrap completes**, use `reusable-onboard` normally
+
+### Security Note
+
+After bootstrapping, consider:
+- Disabling root SSH access
+- Removing the bootstrap password from Doppler
+- Using the `deploy` user for all future operations
+
 ## Supported Application Roles
 
 Create Ansible roles in `ansible/roles/<app_name>/` in this repository. Common examples:

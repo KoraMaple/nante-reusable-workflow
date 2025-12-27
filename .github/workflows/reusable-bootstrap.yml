@@ -1,0 +1,85 @@
+name: "Reusable Bootstrap Existing Infrastructure"
+
+on:
+  workflow_call:
+    inputs:
+      target_ip:
+        type: string
+        description: 'Target IP Address'
+        required: true
+      ssh_user:
+        type: string
+        description: 'Existing SSH User (root or admin with sudo)'
+        required: true
+        default: 'root'
+      ssh_password_secret_name:
+        type: string
+        description: 'Name of the Doppler secret containing SSH password'
+        required: true
+        default: 'BOOTSTRAP_SSH_PASSWORD'
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      DOPPLER_TARGET_PROJECT:
+        required: true
+      DOPPLER_TARGET_CONFIG:
+        required: true
+      GH_PAT:
+        required: true
+
+jobs:
+  bootstrap:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Reusable Workflow Repo
+        uses: actions/checkout@v4
+        with:
+          repository: KoraMaple/nante-reusable-workflow
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Bootstrap Deploy User
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          cd ansible/
+          
+          # Install requirements
+          ansible-galaxy install -r requirements.yml
+          
+          # Install sshpass for password authentication
+          if ! command -v sshpass &> /dev/null; then
+            echo "Installing sshpass..."
+            sudo apt-get update && sudo apt-get install -y sshpass
+          fi
+          
+          # Get password from Doppler (use the secret name from input)
+          SSH_PASSWORD="${${{ inputs.ssh_password_secret_name }}}"
+          
+          if [ -z "$SSH_PASSWORD" ]; then
+            echo "❌ ERROR: SSH password not found in Doppler secret: ${{ inputs.ssh_password_secret_name }}"
+            exit 1
+          fi
+          
+          echo "Bootstrapping deploy user on ${{ inputs.target_ip }}..."
+          
+          # Run bootstrap playbook with password authentication
+          ansible-playbook -i "${{ inputs.target_ip }}," bootstrap.yml \
+            --user "${{ inputs.ssh_user }}" \
+            --extra-vars "ansible_ssh_pass=$SSH_PASSWORD" \
+            --extra-vars "ansible_become_pass=$SSH_PASSWORD" \
+            -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+          
+          echo "✓ Bootstrap complete! Deploy user created with SSH key access."
+          echo "You can now use reusable-onboard workflow with this VM."
+          EOF
