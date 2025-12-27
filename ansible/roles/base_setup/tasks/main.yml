@@ -12,7 +12,6 @@
 - name: Install essential packages
   apt:
     name:
-      - qemu-guest-agent
       - curl
       - apt-transport-https
       - ca-certificates
@@ -22,11 +21,24 @@
     state: present
     update_cache: yes
 
-- name: Ensure QEMU Guest Agent is running
+- name: Check if running in a virtual machine
+  shell: systemd-detect-virt
+  register: virt_type
+  changed_when: false
+  failed_when: false
+
+- name: Install QEMU Guest Agent (VMs only)
+  apt:
+    name: qemu-guest-agent
+    state: present
+  when: virt_type.stdout in ['kvm', 'qemu']
+
+- name: Ensure QEMU Guest Agent is running (VMs only)
   service:
     name: qemu-guest-agent
-    state: restarted
+    state: started
     enabled: yes
+  when: virt_type.stdout in ['kvm', 'qemu']
 
 - name: Install Tailscale
   shell: "curl -fsSL https://tailscale.com/install.sh | sh"
