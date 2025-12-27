@@ -47,38 +47,50 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
+      - name: Install sshpass
+        run: |
+          if ! command -v sshpass &> /dev/null; then
+            echo "Installing sshpass..."
+            sudo apt-get update && sudo apt-get install -y sshpass
+          else
+            echo "sshpass already installed"
+          fi
+
       - name: Bootstrap Deploy User
         run: |
           doppler run -- bash <<'EOF'
           set -e
+          
+          # Verify sshpass is available
+          if ! command -v sshpass &> /dev/null; then
+            echo "❌ ERROR: sshpass is not installed"
+            exit 1
+          fi
           
           cd ansible/
           
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # Install sshpass for password authentication
-          if ! command -v sshpass &> /dev/null; then
-            echo "Installing sshpass..."
-            sudo apt-get update && sudo apt-get install -y sshpass
-          fi
-          
-          # Get password from Doppler (use the secret name from input)
-          SSH_PASSWORD="${${{ inputs.ssh_password_secret_name }}}"
+          # Get password from Doppler - use indirect variable expansion
+          SECRET_NAME="${{ inputs.ssh_password_secret_name }}"
+          SSH_PASSWORD="${!SECRET_NAME}"
           
           if [ -z "$SSH_PASSWORD" ]; then
-            echo "❌ ERROR: SSH password not found in Doppler secret: ${{ inputs.ssh_password_secret_name }}"
+            echo "❌ ERROR: SSH password not found in Doppler secret: $SECRET_NAME"
+            echo "Available environment variables:"
+            env | grep -v "PASSWORD\|SECRET\|TOKEN\|KEY" | sort
             exit 1
           fi
           
           echo "Bootstrapping deploy user on ${{ inputs.target_ip }}..."
           
           # Run bootstrap playbook with password authentication
-          ansible-playbook -i "${{ inputs.target_ip }}," bootstrap.yml \
+          ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i "${{ inputs.target_ip }}," bootstrap.yml \
             --user "${{ inputs.ssh_user }}" \
             --extra-vars "ansible_ssh_pass=$SSH_PASSWORD" \
             --extra-vars "ansible_become_pass=$SSH_PASSWORD" \
-            -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+            --connection=ssh
           
           echo "✓ Bootstrap complete! Deploy user created with SSH key access."
           echo "You can now use reusable-onboard workflow with this VM."

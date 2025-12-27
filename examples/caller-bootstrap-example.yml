@@ -1,0 +1,36 @@
+# Example caller workflow for bootstrapping existing infrastructure
+# Place this in your application repository at .github/workflows/bootstrap-vm.yml
+
+name: Bootstrap Existing VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'IP address of existing VM to bootstrap'
+        required: true
+        type: string
+      ssh_user:
+        description: 'Existing SSH user (root or admin with sudo)'
+        required: true
+        type: string
+        default: 'root'
+      ssh_password_secret:
+        description: 'Name of Doppler secret containing SSH password'
+        required: true
+        type: string
+        default: 'BOOTSTRAP_SSH_PASSWORD'
+
+jobs:
+  bootstrap:
+    name: Bootstrap Deploy User on Existing VM
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-bootstrap.yml@develop
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: ${{ inputs.ssh_user }}
+      ssh_password_secret_name: ${{ inputs.ssh_password_secret }}
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}

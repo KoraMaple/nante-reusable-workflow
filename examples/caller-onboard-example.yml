@@ -1,0 +1,37 @@
+# Example caller workflow for onboarding existing infrastructure
+# Place this in your application repository at .github/workflows/onboard-vm.yml
+# NOTE: Run bootstrap workflow first if deploy user doesn't exist!
+
+name: Onboard Existing VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'IP address of VM to configure'
+        required: true
+        type: string
+      target_hostname:
+        description: 'Hostname to set on the VM'
+        required: true
+        type: string
+      app_role:
+        description: 'Application role to apply (e.g., nginx, k3s)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  onboard:
+    name: Configure Existing VM with Ansible
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: 'deploy'
+      target_hostname: ${{ inputs.target_hostname }}
+      app_role: ${{ inputs.app_role }}
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
