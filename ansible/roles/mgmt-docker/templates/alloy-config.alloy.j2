@@ -138,9 +138,5 @@ loki.process "docker_logs" {
 loki.write "grafana_stack" {
   endpoint {
     url = "http://{{ oo_host }}:3100/loki/api/v1/push"
-    basic_auth {
-      username = "{{ oo_user }}"
-      password = "{{ oo_pass }}"
-    }
   }
 }

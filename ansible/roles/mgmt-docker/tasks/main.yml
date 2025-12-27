@@ -1,18 +1,56 @@
 ---
-- name: Ensure Alloy user is in docker group
+# mgmt-docker role installs Alloy and configures Docker monitoring
+# This role replaces base_setup for Docker management servers
+
+- name: Install essential packages
+  apt:
+    name:
+      - curl
+      - apt-transport-https
+      - ca-certificates
+      - gpg
+      - unzip
+      - rsyslog
+    state: present
+    update_cache: yes
+
+- name: Install Tailscale
+  shell: "curl -fsSL https://tailscale.com/install.sh | sh"
+  args:
+    creates: /usr/bin/tailscale
+
+- name: Connect to Tailscale
+  command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }}"
+  environment:
+    TS_AUTHKEY: "{{ ts_authkey }}"
+  register: tailscale_result
+  changed_when: "'Success' in tailscale_result.stdout or tailscale_result.rc == 0"
+  failed_when: false
+
+- name: Validate OO_HOST is set
+  fail:
+    msg: "OO_HOST is not defined. Cannot configure Grafana Alloy."
+  when: oo_host is not defined or oo_host | length == 0
+
+- name: Create alloy user with log and docker permissions
+  user:
+    name: alloy
+    system: yes
+    groups: adm,docker
+    append: yes
+    state: present
+
+- name: Install and Configure Grafana Alloy
+  ansible.builtin.include_role:
+    name: grafana.grafana.alloy
+  vars:
+    alloy_config_file_content: "{{ lookup('template', 'alloy-config.alloy.j2') }}"
+
+- name: Verify Alloy user is in docker group
   user:
     name: alloy
     groups: docker
     append: yes
-  notify: Restart Alloy
-
-- name: Deploy Alloy configuration for Docker monitoring
-  template:
-    src: alloy-config.alloy.j2
-    dest: /etc/alloy/config.alloy
-    owner: alloy
-    group: alloy
-    mode: '0644'
   notify: Restart Alloy
 
 - name: Ensure Alloy service is enabled and started

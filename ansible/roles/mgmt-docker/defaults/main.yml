@@ -2,10 +2,11 @@
 # Default variables for mgmt-docker role
 # These can be overridden at playbook level
 
-# Observability endpoints (should match base_setup)
-oo_host: "{{ lookup('env', 'OO_HOST') }}"
-oo_user: "{{ lookup('env', 'OO_USER') }}"
-oo_pass: "{{ lookup('env', 'OO_PASS') }}"
+# Observability endpoints
+oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') | regex_replace(':[0-9]+$', '') }}"
+
+# Tailscale
+ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
 
 # Target hostname for labeling
 target_hostname: "{{ inventory_hostname }}"
