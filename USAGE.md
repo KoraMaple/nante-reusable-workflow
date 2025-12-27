@@ -76,6 +76,24 @@ In addition to the Doppler secrets above, you must also configure these GitHub S
 6. In your **caller repository**, go to **Settings → Secrets and variables → Actions**
 7. Click **New repository secret**, name it `GH_PAT`, paste the token
 
+## Self-Hosted Runner Setup
+
+**IMPORTANT:** Before using these workflows, ensure your self-hosted runner is properly configured.
+
+See [`RUNNER_SETUP.md`](./RUNNER_SETUP.md) for detailed setup instructions.
+
+### Quick Setup
+
+On your self-hosted runner machine:
+
+```bash
+# Install required packages
+sudo apt-get update && sudo apt-get install -y ansible terraform sshpass
+
+# Configure passwordless sudo (for runner user)
+echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/github-runner
+```
+
 ## Bootstrapping Existing Infrastructure
 
 If you have existing VMs that don't have the `deploy` user and SSH key configured, you need to bootstrap them first.
