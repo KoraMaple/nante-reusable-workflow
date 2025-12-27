@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     # MinIO configuration - values provided via -backend-config in workflow
-    # bucket, endpoint, access_key, secret_key are passed at init time
+    # bucket, endpoints, access_key, secret_key are passed at init time
     key                         = "terraform.tfstate"
     region                      = "us-east-1"  # Required but ignored by MinIO
     skip_credentials_validation = true
@@ -9,6 +9,7 @@ terraform {
     skip_region_validation      = true
     skip_requesting_account_id  = true
     use_path_style              = true  # Required for MinIO
+    skip_s3_checksum            = true  # Disable checksums for MinIO compatibility
   }
   required_providers {
     proxmox = {

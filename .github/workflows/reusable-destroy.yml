@@ -51,7 +51,7 @@ jobs:
           token: ${{ secrets.GH_PAT }}
 
       - name: Install Doppler CLI
-        uses: dopplerhq/doppler-action@v3
+        uses: dopplerhq/cli-action@v3
         with:
           doppler_token: ${{ secrets.DOPPLER_TOKEN }}
 
@@ -64,23 +64,20 @@ jobs:
           echo "✓ Destruction confirmed for app: ${{ inputs.app_name }}"
 
       - name: Terraform Init
-        env:
-          AWS_ACCESS_KEY_ID: ${{ env.MINIO_ROOT_USER }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.MINIO_ROOT_PASSWORD }}
+        uses: ./.github/actions/terraform-init
+        with:
+          workspace: ${{ inputs.app_name }}
+      
+      - name: Verify Workspace Exists
         run: |
           cd terraform/
-          terraform init \
-            -backend-config="bucket=terraform-state" \
-            -backend-config="endpoint=http://192.168.20.10:9000" \
-            -backend-config="access_key=${{ env.MINIO_ROOT_USER }}" \
-            -backend-config="secret_key=${{ env.MINIO_ROOT_PASSWORD }}"
-          
           # List available workspaces for debugging
           echo "Available workspaces:"
           terraform workspace list
           
-          # Select the app workspace (fail if it doesn't exist - nothing to destroy)
-          if ! terraform workspace select ${{ inputs.app_name }} 2>/dev/null; then
+          # Check if current workspace matches app_name
+          CURRENT_WS=$(terraform workspace show)
+          if [ "$CURRENT_WS" != "${{ inputs.app_name }}" ]; then
             echo "❌ Workspace '${{ inputs.app_name }}' does not exist."
             echo "   This means no infrastructure was provisioned with this app name."
             echo "   Available workspaces are listed above."

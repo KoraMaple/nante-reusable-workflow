@@ -93,8 +93,6 @@ jobs:
         uses: ./.github/actions/terraform-init
         with:
           workspace: ${{ inputs.app_name }}
-          minio_user: ${{ env.MINIO_ROOT_USER }}
-          minio_password: ${{ env.MINIO_ROOT_PASSWORD }}
 
       - name: Terraform Plan
         if: ${{ inputs.skip_terraform != true }}

@@ -39,7 +39,7 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           
       - name: Install Doppler CLI
-        uses: dopplerhq/doppler-action@v3
+        uses: dopplerhq/cli-action@v3
         with:
           doppler_token: ${{ secrets.DOPPLER_TOKEN }}
 
