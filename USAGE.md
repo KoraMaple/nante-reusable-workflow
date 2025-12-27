@@ -55,6 +55,17 @@ Set these in your **Doppler Project**:
 | `MINIO_ROOT_USER` | MinIO root user for Terraform state | (your MinIO root user) |
 | `MINIO_ROOT_PASSWORD` | MinIO root password for Terraform state | (your MinIO root password) |
 
+### Required GitHub Secrets
+
+In addition to the Doppler secrets above, you must also configure these GitHub Secrets in your **caller repository**:
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `DOPPLER_TOKEN` | Doppler service token | (generated in Doppler dashboard) |
+| `DOPPLER_TARGET_PROJECT` | Doppler project name | `nante-homelab` |
+| `DOPPLER_TARGET_CONFIG` | Doppler config name | `dev` or `prd` |
+| `GH_PAT` | GitHub Personal Access Token | (see below) |
+
 ### Creating the GH_PAT Secret
 
 1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)**

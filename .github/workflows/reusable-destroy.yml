@@ -56,6 +56,12 @@ jobs:
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Confirm Destruction
         run: |
@@ -119,7 +125,3 @@ jobs:
           
           echo "✓ VM '${{ inputs.app_name }}' has been destroyed."
           EOF
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          DOPPLER_TARGET_PROJECT: "${{ secrets.DOPPLER_TARGET_PROJECT }}"
-          DOPPLER_TARGET_CONFIG: "${{ secrets.DOPPLER_TARGET_CONFIG }}"

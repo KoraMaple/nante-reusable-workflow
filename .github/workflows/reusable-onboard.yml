@@ -44,6 +44,12 @@ jobs:
           
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Run Ansible with Doppler
         run: |
@@ -76,7 +82,3 @@ jobs:
             --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
             --extra-vars "app_role_name=${{ inputs.app_role }}"
           EOF
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          DOPPLER_TARGET_PROJECT: "${{ secrets.DOPPLER_TARGET_PROJECT }}"
-          DOPPLER_TARGET_CONFIG: "${{ secrets.DOPPLER_TARGET_CONFIG }}"
