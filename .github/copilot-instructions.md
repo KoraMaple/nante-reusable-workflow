@@ -5,7 +5,7 @@ This repository hosts reusable GitHub Actions workflows for provisioning and con
 ## Project Vision & Goals
 -   **Goal:** Build a modular, pluggable, and secure pipeline for a self-hosted environment.
 -   **Modularity:** Users must be able to call specific stages independently (e.g., CI only, CD only, Provision only). Support scenarios like deploying to existing infrastructure or just updating secrets.
--   **Stack:** Terraform, Ansible, GitHub Actions, Octopus Deploy (Self-hosted), Nexus (Self-hosted), **GitHub Secrets** (Secrets).
+-   **Stack:** Terraform, Ansible, GitHub Actions, Octopus Deploy (Self-hosted), Nexus (Self-hosted), **Doppler** (Secrets), **MinIO** (Terraform State).
 -   **Infrastructure:** Proxmox VE (Home Lab) with Self-hosted GitHub Actions Runners.
 -   **Language Preference:** **Use Go (Golang)** for any custom scripting, glue code, or CLI tools needed to plug these tools together. Avoid Python/Bash for complex logic.
 
@@ -16,12 +16,13 @@ The workflows are designed as composable building blocks. Calling repositories p
 1.  **Provisioning (Terraform):** Creates VMs/LXCs on Proxmox. *Optional if using existing infrastructure.*
 2.  **Configuration (Ansible):** Bootstraps the OS and applies application roles.
 3.  **Artifacts & Deployment:** Integrates with Nexus for artifacts and Octopus Deploy for release management.
-4.  **Secret Management:** GitHub Secrets are used for injecting secrets into the environment.
+4.  **Secret Management:** Doppler is used for centralized secret management. Secrets are injected via `dopplerhq/doppler-action`.
 
 ### Key Components
 -   **Terraform (`/terraform`):** Manages Proxmox resources.
     -   **Provider:** `Telmate/proxmox`.
-    -   **State:** Local backend (currently), isolated via **Workspaces** per application (`terraform workspace select ${{ app_name }}`).
+    -   **State:** S3 backend (MinIO at `http://192.168.20.10:9000`), isolated via **Workspaces** per application.
+    -   **Configurable:** `proxmox_node`, `proxmox_storage`, `vm_template` can be overridden per deployment.
     -   **Conventions:**
         -   Gateway: `192.168.<vlan_tag>.1`.
         -   Hostname: `${app_name}-${environment}-${random_id}`.
@@ -56,11 +57,12 @@ The workflows are designed as composable building blocks. Calling repositories p
     ```bash
     ansible-playbook -i "192.168.20.50," site.yml --user deploy --extra-vars "target_hostname=..."
     ```
--   **Secrets:** Passed via environment variables (e.g., `TS_AUTHKEY`) or temporary files (SSH keys).
+-   **Secrets:** Passed via environment variables from Doppler. SSH keys handled via `ssh-agent` (no temp files).
 
 ## Integration Points
 
--   **Proxmox:** Target environment. Requires `target_node = "pmx"` and `storage = "zfs-vm"`.
+-   **Proxmox:** Target environment. Defaults: `target_node = "pmx"`, `storage = "zfs-vm"` (configurable via inputs).
 -   **Tailscale:** **Primary Networking Layer.** All built VMs/LXCs are accessed exclusively via Tailscale.
--   **GitHub Secrets:** Source of truth for secrets. Workflows should fetch secrets from GitHub Secrets before passing them to tools.
+-   **Doppler:** Source of truth for secrets. Workflows use `dopplerhq/doppler-action` to inject secrets as environment variables.
+-   **MinIO:** S3-compatible object storage for Terraform state at `http://192.168.20.10:9000`.
 -   **Nexus/Octopus:** **Active Services.** Nexus is the artifact repository. Octopus Deploy is configured to pull artifacts from Nexus feeds. Workflows should focus on pushing artifacts to Nexus and triggering Octopus releases.

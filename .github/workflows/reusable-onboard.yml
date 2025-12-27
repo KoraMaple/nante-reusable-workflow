@@ -1,0 +1,57 @@
+name: "Reusable Manual Onboarding"
+
+on:
+  workflow_call:
+    inputs:
+      target_ip:
+        type: string
+        description: 'Target IP Address'
+        required: true
+      ssh_user:
+        type: string
+        description: 'SSH User'
+        required: true
+        default: 'deploy'
+      target_hostname:
+        type: string
+        description: 'Hostname to set'
+        required: true
+      app_role:
+        type: string
+        description: 'Application Role (e.g. nginx)'
+        required: false
+        default: ''
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      GH_PAT:
+        required: true
+
+jobs:
+  onboard:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Reusable Workflow Repo
+        uses: actions/checkout@v4
+        with:
+          repository: KoraMaple/nante-reusable-workflow
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          
+      - name: Install Doppler CLI
+        uses: dopplerhq/doppler-action@v3
+        with:
+          doppler_token: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+
+      - name: Run Ansible
+        uses: ./.github/actions/ansible-run
+        with:
+          target_ip: ${{ inputs.target_ip }}
+          ssh_user: ${{ inputs.ssh_user }}
+          target_hostname: ${{ inputs.target_hostname }}
+          app_role: ${{ inputs.app_role }}

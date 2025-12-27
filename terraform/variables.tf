@@ -63,3 +63,22 @@ variable "ssh_public_key" {
   type = string
   sensitive = true 
 }
+
+# Infrastructure configuration - can be overridden per deployment
+variable "proxmox_target_node" {
+  type        = string
+  default     = "pmx"
+  description = "Proxmox node to deploy VM on"
+}
+
+variable "proxmox_storage" {
+  type        = string
+  default     = "zfs-vm"
+  description = "Storage pool for VM disks"
+}
+
+variable "vm_template" {
+  type        = string
+  default     = "ubuntu-2404-template"
+  description = "VM template to clone from"
+}

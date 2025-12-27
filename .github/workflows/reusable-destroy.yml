@@ -32,13 +32,15 @@ on:
         type: string
         description: 'IP of the VM to destroy (must match VLAN subnet)'
         required: true
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      GH_PAT:
+        required: true
 
 jobs:
   destroy:
     runs-on: self-hosted
-    env:
-      PM_API_TOKEN_ID: ${{ secrets.PROXMOX_TOKEN_ID }}
-      PM_API_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
     
     steps:
       - name: Checkout Reusable Workflow Repo
@@ -48,13 +50,10 @@ jobs:
           ref: develop
           token: ${{ secrets.GH_PAT }}
 
-      - name: Setup Terraform State Directory
-        run: |
-          # Use runner's home directory for state persistence
-          STATE_DIR="$HOME/.terraform-state"
-          mkdir -p $STATE_DIR
-          echo "TERRAFORM_STATE_DIR=$STATE_DIR" >> $GITHUB_ENV
-          echo "Using state directory: $STATE_DIR"
+      - name: Install Doppler CLI
+        uses: dopplerhq/doppler-action@v3
+        with:
+          doppler_token: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Confirm Destruction
         run: |
@@ -64,17 +63,17 @@ jobs:
           fi
           echo "✓ Destruction confirmed for app: ${{ inputs.app_name }}"
 
-      - name: Terraform Destroy Plan
+      - name: Terraform Init
         env:
-          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ env.MINIO_ROOT_USER }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.MINIO_ROOT_PASSWORD }}
         run: |
           cd terraform/
           terraform init \
-            -backend-config="path=$TERRAFORM_STATE_DIR/terraform.tfstate" \
-            -backend-config="workspace_dir=$TERRAFORM_STATE_DIR/terraform.tfstate.d"
+            -backend-config="bucket=terraform-state" \
+            -backend-config="endpoint=http://192.168.20.10:9000" \
+            -backend-config="access_key=${{ env.MINIO_ROOT_USER }}" \
+            -backend-config="secret_key=${{ env.MINIO_ROOT_PASSWORD }}"
           
           # List available workspaces for debugging
           echo "Available workspaces:"
@@ -87,7 +86,15 @@ jobs:
             echo "   Available workspaces are listed above."
             exit 1
           fi
-          
+
+      - name: Terraform Destroy Plan
+        env:
+          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
+        run: |
+          cd terraform/
           # Show what will be destroyed
           terraform plan -destroy \
             -var="app_name=${{ inputs.app_name }}" \
@@ -100,10 +107,12 @@ jobs:
 
       - name: Terraform Destroy
         env:
-          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
+          TF_VAR_proxmox_api_url: ${{ env.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ env.PROXMOX_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ env.PROXMOX_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ env.ANS_SSH_PUBLIC_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ env.MINIO_ROOT_USER }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.MINIO_ROOT_PASSWORD }}
         run: |
           cd terraform/
           terraform apply destroy_plan

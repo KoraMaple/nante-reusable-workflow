@@ -1,0 +1,43 @@
+name: 'Terraform Init with MinIO'
+description: 'Initialize Terraform with MinIO S3 backend'
+
+inputs:
+  workspace:
+    description: 'Terraform workspace name'
+    required: true
+  minio_user:
+    description: 'MinIO root user'
+    required: true
+  minio_password:
+    description: 'MinIO root password'
+    required: true
+  minio_endpoint:
+    description: 'MinIO endpoint URL'
+    required: false
+    default: 'http://192.168.20.10:9000'
+  bucket:
+    description: 'MinIO bucket name'
+    required: false
+    default: 'terraform-state'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Terraform Init
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.minio_user }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.minio_password }}
+      run: |
+        cd terraform/
+        terraform init \
+          -backend-config="bucket=${{ inputs.bucket }}" \
+          -backend-config="endpoint=${{ inputs.minio_endpoint }}" \
+          -backend-config="access_key=${{ inputs.minio_user }}" \
+          -backend-config="secret_key=${{ inputs.minio_password }}"
+
+    - name: Select Workspace
+      shell: bash
+      run: |
+        cd terraform/
+        terraform workspace select ${{ inputs.workspace }} || terraform workspace new ${{ inputs.workspace }}

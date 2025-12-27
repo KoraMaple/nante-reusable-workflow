@@ -1,5 +1,15 @@
 terraform {
-  backend "local" {}
+  backend "s3" {
+    # MinIO configuration - values provided via -backend-config in workflow
+    # bucket, endpoint, access_key, secret_key are passed at init time
+    key                         = "terraform.tfstate"
+    region                      = "us-east-1"  # Required but ignored by MinIO
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    use_path_style              = true  # Required for MinIO
+  }
   required_providers {
     proxmox = {
       source  = "Telmate/proxmox"
@@ -31,8 +41,8 @@ locals {
 
 resource "proxmox_vm_qemu" "generic_vm" {
   name        = "${var.app_name}-vm"
-  target_node = "pmx"
-  clone       = "ubuntu-2404-template"
+  target_node = var.proxmox_target_node
+  clone       = var.vm_template
   full_clone  = true
   
   # Use VirtIO SCSI for better performance
@@ -51,14 +61,14 @@ resource "proxmox_vm_qemu" "generic_vm" {
     slot    = "scsi0"
     size    = var.vm_disk_gb
     type    = "disk"
-    storage = "zfs-vm"
+    storage = var.proxmox_storage
   }
   
   # Cloud-init drive - required for IP configuration
   disk {
     slot    = "ide2"
     type    = "cloudinit"
-    storage = "zfs-vm"
+    storage = var.proxmox_storage
   }
   
   network {

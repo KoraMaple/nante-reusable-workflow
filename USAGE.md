@@ -26,20 +26,34 @@ jobs:
 
 ## Required Secrets
 
+We use **Doppler** for secret management. You need to configure the following secrets:
+
+### GitHub Repository Secrets
+
 Set these in your **caller repository** (or at the organization level):
+
+| Secret | Description |
+|--------|-------------|
+| `GH_PAT` | **Required** - GitHub PAT with `repo` scope to checkout this private repo |
+| `DOPPLER_TOKEN` | **Required** - Service Token from your Doppler project config |
+
+### Doppler Secrets
+
+Set these in your **Doppler Project**:
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `GH_PAT` | **Required** - GitHub PAT with `repo` scope to checkout this private repo | (GitHub Personal Access Token) |
 | `PROXMOX_API_URL` | Proxmox API endpoint | `https://192.168.1.100:8006/api2/json` |
 | `PROXMOX_TOKEN_ID` | Proxmox API token ID | `root@pam!terraform` |
 | `PROXMOX_TOKEN_SECRET` | Proxmox API token secret | (generated in Proxmox) |
 | `ANS_SSH_PUBLIC_KEY` | Public key for cloud-init | (contents of ~/.ssh/id_rsa.pub) |
 | `SSH_PRIVATE_KEY` | Private key for Ansible | (contents of ~/.ssh/id_rsa) |
 | `TS_AUTHKEY` | Tailscale auth key | (generated in Tailscale admin) |
+| `OO_HOST` | OpenObserve host/IP | `192.168.20.5` |
 | `OO_USER` | OpenObserve username | `admin@example.com` |
 | `OO_PASS` | OpenObserve password | (your OpenObserve password) |
-| `OO_HOST` | OpenObserve host/IP | `192.168.20.5` |
+| `MINIO_ROOT_USER` | MinIO root user for Terraform state | (your MinIO root user) |
+| `MINIO_ROOT_PASSWORD` | MinIO root password for Terraform state | (your MinIO root password) |
 
 ### Creating the GH_PAT Secret
 
@@ -118,9 +132,26 @@ All data is tagged with consistent labels for easy filtering:
 
 ## Terraform State Management
 
-This workflow handles Terraform state persistence automatically.
-*   **Provision:** Creates a dedicated workspace for your app (e.g., `nginx`) and stores the state in the runner's persistent storage.
-*   **Destroy:** Retrieves the existing state from the persistent storage to cleanly destroy resources.
+Terraform state is stored remotely in **MinIO** (S3-compatible object storage) at `http://192.168.20.10:9000`.
+
+### How It Works
+*   **Backend:** S3-compatible backend pointing to MinIO bucket `terraform-state`
+*   **Workspaces:** Each app gets its own Terraform workspace (e.g., `nginx`, `k3s`)
+*   **State Isolation:** State files are stored per-workspace, preventing conflicts
+
+### MinIO Setup Prerequisites
+
+Before running workflows, ensure:
+
+1. **Create the bucket** in MinIO:
+   ```bash
+   mc alias set minio http://192.168.20.10:9000 <access_key> <secret_key>
+   mc mb minio/terraform-state
+   ```
+
+2. **Add credentials to Doppler:**
+   - `MINIO_ROOT_USER` - Your MinIO root user
+   - `MINIO_ROOT_PASSWORD` - Your MinIO root password
 
 ## Architecture
 
@@ -148,10 +179,55 @@ OpenObserve (Metrics)   OpenObserve (Logs)
 - **Local Network:** VMs get static IPs on your local VLAN (e.g., `192.168.20.x`).
 - **OpenObserve:** Metrics and logs are sent to your OpenObserve instance at `http://<OO_HOST>:5080`.
 
+## Manual Onboarding
+
+You can onboard existing machines (not created via Terraform) using the `reusable-onboard.yml` workflow.
+
+### Example Workflow
+
+Create a new workflow file in your repository (e.g., `.github/workflows/onboard-my-server.yml`):
+
+```yaml
+name: Onboard Manual Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'IP Address of the server'
+        required: true
+      ssh_user:
+        description: 'SSH User (must have sudo)'
+        required: true
+        default: 'ubuntu'
+      hostname:
+        description: 'Hostname to set'
+        required: true
+      app_role:
+        description: 'App Role (e.g., nginx)'
+        required: false
+
+jobs:
+  onboard:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@v0.1.0-alpha
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: ${{ inputs.ssh_user }}
+      target_hostname: ${{ inputs.hostname }}
+      app_role: ${{ inputs.app_role }}
+    secrets: inherit
+```
+
+### Prerequisites
+
+1.  **SSH Access:** The `SSH_PRIVATE_KEY` in Doppler must have access to the target machine's `ssh_user`.
+2.  **Sudo:** The `ssh_user` must have passwordless sudo or be able to sudo.
+3.  **Secrets:** The caller repository must have `GH_PAT` and `DOPPLER_TOKEN` configured.
+
 ## Troubleshooting
 
 ### SSH Key Validation Failed
-- Ensure `SSH_PRIVATE_KEY` is properly formatted and complete
+- Ensure `SSH_PRIVATE_KEY` in Doppler is properly formatted and complete
 - Check that there are no extra whitespace or line breaks
 
 ### Ansible Connection Timeout

@@ -1,0 +1,67 @@
+name: 'Run Ansible Playbook'
+description: 'Install requirements and run Ansible playbook with connectivity test'
+
+inputs:
+  target_ip:
+    description: 'Target IP address'
+    required: true
+  ssh_user:
+    description: 'SSH user for Ansible'
+    required: false
+    default: 'deploy'
+  target_hostname:
+    description: 'Hostname to set on target'
+    required: true
+  app_role:
+    description: 'Application role to apply'
+    required: false
+    default: ''
+  vlan_tag:
+    description: 'VLAN tag for network configuration'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Ansible Requirements
+      shell: bash
+      run: |
+        cd ansible/
+        ansible-galaxy install -r requirements.yml
+
+    - name: Test Ansible Connectivity
+      shell: bash
+      run: |
+        echo "Testing Ansible connectivity to ${{ inputs.target_ip }}..."
+        if ! ansible all -i "${{ inputs.target_ip }}," -m ping \
+          --user "${{ inputs.ssh_user }}" \
+          --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+          echo "❌ ERROR: Ansible cannot connect to VM at ${{ inputs.target_ip }}"
+          echo "Attempting direct SSH test..."
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            "${{ inputs.ssh_user }}@${{ inputs.target_ip }}" "echo 'SSH connection successful'" || true
+          exit 1
+        fi
+        echo "✓ Ansible connectivity confirmed"
+
+    - name: Run Ansible Playbook
+      shell: bash
+      run: |
+        cd ansible/
+        
+        # Build extra-vars dynamically
+        EXTRA_VARS="target_hostname=${{ inputs.target_hostname }}"
+        
+        if [ -n "${{ inputs.app_role }}" ]; then
+          EXTRA_VARS="$EXTRA_VARS app_role_name=${{ inputs.app_role }}"
+        fi
+        
+        if [ -n "${{ inputs.vlan_tag }}" ]; then
+          EXTRA_VARS="$EXTRA_VARS vlan_tag=${{ inputs.vlan_tag }}"
+        fi
+        
+        ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
+          --user "${{ inputs.ssh_user }}" \
+          --ssh-common-args='-o StrictHostKeyChecking=no' \
+          --extra-vars "$EXTRA_VARS"
