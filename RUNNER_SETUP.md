@@ -113,6 +113,28 @@ The runner user needs:
   - Your MinIO server
   - Target VMs for SSH connections
 
+## Target VM Requirements
+
+For the **bootstrap workflow** to work, target VMs must have:
+
+1. **SSH server running** on port 22
+2. **Password authentication enabled** (temporarily):
+   ```bash
+   # On target VM
+   sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+   sudo systemctl restart sshd
+   ```
+3. **Root or admin user** with known password
+4. **Network connectivity** from runner to target VM
+
+**Security Note:** After bootstrap completes, disable password auth:
+```bash
+sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
+```
+
+For detailed troubleshooting, see [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
+
 ## Troubleshooting
 
 ### "sudo: a password is required"

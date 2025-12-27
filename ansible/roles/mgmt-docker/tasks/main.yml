@@ -1,0 +1,22 @@
+---
+- name: Ensure Alloy user is in docker group
+  user:
+    name: alloy
+    groups: docker
+    append: yes
+  notify: Restart Alloy
+
+- name: Deploy Alloy configuration for Docker monitoring
+  template:
+    src: alloy-config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    owner: alloy
+    group: alloy
+    mode: '0644'
+  notify: Restart Alloy
+
+- name: Ensure Alloy service is enabled and started
+  systemd:
+    name: alloy
+    enabled: yes
+    state: started

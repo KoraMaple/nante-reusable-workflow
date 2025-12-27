@@ -1,0 +1,146 @@
+// Grafana Alloy Configuration for Docker Management Server
+// Monitors: System metrics, system logs, Docker socket metrics, and container logs
+
+// 1. Collect System Metrics (node_exporter)
+prometheus.exporter.unix "default" {}
+
+// Add labels (hostname) to metrics
+discovery.relabel "system_metrics" {
+  targets = prometheus.exporter.unix.default.targets
+  rule {
+    target_label = "instance"
+    replacement  = "{{ target_hostname }}"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "node_exporter"
+  }
+}
+
+prometheus.scrape "metrics" {
+  targets    = discovery.relabel.system_metrics.output
+  forward_to = [prometheus.remote_write.grafana_stack.receiver]
+}
+
+// 2. Docker Socket Metrics
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_metrics" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+    regex         = "/(.*)"
+    replacement   = "$1"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_id"]
+    target_label  = "container_id"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = "{{ target_hostname }}"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "docker"
+  }
+}
+
+prometheus.scrape "docker_containers" {
+  targets    = discovery.relabel.docker_metrics.output
+  forward_to = [prometheus.remote_write.grafana_stack.receiver]
+}
+
+// 3. Docker Container Stats (cAdvisor-style)
+prometheus.exporter.cadvisor "docker_stats" {
+  docker_host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "cadvisor_metrics" {
+  targets = prometheus.exporter.cadvisor.docker_stats.targets
+  rule {
+    target_label = "instance"
+    replacement  = "{{ target_hostname }}"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "cadvisor"
+  }
+}
+
+prometheus.scrape "docker_stats" {
+  targets    = discovery.relabel.cadvisor_metrics.output
+  forward_to = [prometheus.remote_write.grafana_stack.receiver]
+}
+
+// Remote write endpoint for metrics
+prometheus.remote_write "grafana_stack" {
+  endpoint {
+    url = "http://{{ oo_host }}:9090/api/v1/write"
+  }
+}
+
+// 4. Collect System Logs
+local.file_match "system_logs" {
+  path_targets = [
+    {
+      __path__ = "/var/log/*.log",
+      host     = "{{ target_hostname }}",
+      job      = "system",
+    },
+    {
+      __path__ = "/var/log/syslog",
+      host     = "{{ target_hostname }}",
+      job      = "system",
+    },
+  ]
+}
+
+loki.source.file "system_scrape" {
+  targets    = local.file_match.system_logs.targets
+  forward_to = [loki.write.grafana_stack.receiver]
+}
+
+// 5. Collect Docker Container Logs
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.process.docker_logs.receiver]
+  relabel_rules = discovery.relabel.docker_metrics.rules
+}
+
+// Process and add labels to Docker logs
+loki.process "docker_logs" {
+  forward_to = [loki.write.grafana_stack.receiver]
+
+  stage.docker {}
+
+  stage.labels {
+    values = {
+      container    = "",
+      container_id = "",
+      instance     = "",
+      job          = "",
+    }
+  }
+
+  stage.static_labels {
+    values = {
+      host = "{{ target_hostname }}",
+    }
+  }
+}
+
+// Loki write endpoint for logs
+loki.write "grafana_stack" {
+  endpoint {
+    url = "http://{{ oo_host }}:3100/loki/api/v1/push"
+    basic_auth {
+      username = "{{ oo_user }}"
+      password = "{{ oo_pass }}"
+    }
+  }
+}

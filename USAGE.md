@@ -98,9 +98,22 @@ echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/github-runner
 
 If you have existing VMs that don't have the `deploy` user and SSH key configured, you need to bootstrap them first.
 
-### Option 1: Manual Bootstrap (Quickest)
+### Prerequisites for Bootstrap Workflow
 
-SSH into the VM as root/admin and run:
+The bootstrap workflow requires **password authentication** to be enabled on the target VM's SSH server.
+
+**Check SSH config on target VM:**
+```bash
+sudo grep PasswordAuthentication /etc/ssh/sshd_config
+```
+
+If it shows `PasswordAuthentication no`, you need to either:
+1. **Enable it temporarily** (see [Troubleshooting Guide](./docs/TROUBLESHOOTING.md))
+2. **Use manual bootstrap** (recommended, see below)
+
+### Option 1: Manual Bootstrap (Recommended)
+
+Access the VM via console (Proxmox GUI, physical access, or existing SSH key) and run:
 
 ```bash
 # Create deploy user
@@ -151,11 +164,40 @@ After bootstrapping, consider:
 
 Create Ansible roles in `ansible/roles/<app_name>/` in this repository. Common examples:
 
-- `nginx` – Installs and configures Nginx
-- `k3s` – Installs and configures Kubernetes (K3s)
-- `nexus` – Installs Nexus Repository Manager
+- **`nginx`** – Installs and configures Nginx web server
+- **`k3s`** – Installs and configures Kubernetes (K3s)
+- **`nexus`** – Installs Nexus Repository Manager
+- **`mgmt-docker`** – Onboards existing Docker servers with container monitoring and log collection
 
 The `app_name` parameter will automatically run the corresponding role.
+
+### mgmt-docker Role
+
+For existing servers running Docker with multiple containers:
+
+```yaml
+jobs:
+  onboard:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
+    with:
+      target_ip: "192.168.20.50"
+      ssh_user: "deploy"
+      target_hostname: "docker-mgmt"
+      app_role: "mgmt-docker"
+    secrets: inherit
+```
+
+**What it monitors:**
+- System metrics (CPU, memory, disk, network)
+- Docker socket metrics (container status, networks, volumes)
+- Container resource usage (CPU, memory per container)
+- System logs and all container logs
+
+**Requirements:**
+- Docker must be pre-installed on target
+- Target must have `deploy` user with SSH key access (use bootstrap workflow if needed)
+
+See [`ansible/roles/mgmt-docker/README.md`](./ansible/roles/mgmt-docker/README.md) for details.
 
 ## Destroying Resources
 
