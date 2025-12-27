@@ -56,6 +56,10 @@ on:
     secrets:
       DOPPLER_TOKEN:
         required: true
+      DOPPLER_TARGET_PROJECT:
+        required: true
+      DOPPLER_TARGET_CONFIG:
+        required: true
       GH_PAT:
         required: true
 
@@ -73,8 +77,6 @@ jobs:
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
-        with:
-          doppler_token: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Validate VLAN and IP Match
         run: |
@@ -140,6 +142,8 @@ jobs:
           EOF
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_TARGET_PROJECT: "${{ secrets.DOPPLER_TARGET_PROJECT }}"
+          DOPPLER_TARGET_CONFIG: "${{ secrets.DOPPLER_TARGET_CONFIG }}"
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
@@ -228,3 +232,5 @@ jobs:
           EOF
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_TARGET_PROJECT: "${{ secrets.DOPPLER_TARGET_PROJECT }}"
+          DOPPLER_TARGET_CONFIG: "${{ secrets.DOPPLER_TARGET_CONFIG }}"
