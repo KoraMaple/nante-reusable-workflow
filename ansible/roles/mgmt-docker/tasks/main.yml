@@ -44,7 +44,7 @@
   ansible.builtin.include_role:
     name: grafana.grafana.alloy
   vars:
-    alloy_config_file_content: "{{ lookup('template', 'alloy-config.alloy.j2') }}"
+    alloy_config: "{{ lookup('template', 'alloy-config.alloy.j2') }}"
 
 - name: Verify Alloy user is in docker group
   user:
