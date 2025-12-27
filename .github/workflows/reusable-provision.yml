@@ -138,6 +138,8 @@ jobs:
           # Terraform Apply
           terraform apply tfplan
           EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
@@ -224,3 +226,5 @@ jobs:
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}"
           EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

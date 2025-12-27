@@ -74,3 +74,5 @@ jobs:
             --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
             --extra-vars "app_role_name=${{ inputs.app_role }}"
           EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

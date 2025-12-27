@@ -117,3 +117,5 @@ jobs:
           
           echo "✓ VM '${{ inputs.app_name }}' has been destroyed."
           EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
