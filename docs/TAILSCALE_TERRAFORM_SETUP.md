@@ -26,6 +26,16 @@ terraform destroy → Device automatically removed
 
 1. Tailscale account with admin access
 2. OAuth client credentials (recommended) or API key
+3. **Optional:** ACL tags configured (required for ephemeral keys)
+
+## Quick Start (No ACL Setup)
+
+The default configuration works without ACL setup:
+- Non-ephemeral keys (no tags)
+- Manual cleanup when VMs destroyed
+- Simpler initial setup
+
+**To enable automatic cleanup**, see [TAILSCALE_ACL_SETUP.md](./TAILSCALE_ACL_SETUP.md) for ACL configuration.
 
 ## Setup Steps
 
