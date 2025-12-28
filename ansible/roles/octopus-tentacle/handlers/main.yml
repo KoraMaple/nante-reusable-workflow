@@ -1,0 +1,11 @@
+---
+# Handlers for octopus-tentacle role
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart Tentacle
+  systemd:
+    name: tentacle
+    state: restarted

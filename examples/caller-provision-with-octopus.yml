@@ -1,0 +1,36 @@
+name: Provision VM with Octopus Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Application name'
+        required: true
+        default: 'nginx'
+      environment:
+        description: 'Environment'
+        required: true
+        type: choice
+        options:
+          - Development
+          - Staging
+          - Production
+
+jobs:
+  provision:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main
+    with:
+      app_name: ${{ inputs.app_name }}
+      vlan_tag: "20"
+      vm_target_ip: "192.168.20.50"
+      cpu_cores: "2"
+      ram_mb: "4096"
+      disk_gb: "20G"
+      # Octopus Deploy configuration
+      octopus_environment: ${{ inputs.environment }}
+      octopus_roles: "web-server,nginx"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}

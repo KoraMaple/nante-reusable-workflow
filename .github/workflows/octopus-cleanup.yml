@@ -1,0 +1,120 @@
+name: Cleanup Orphaned Octopus Targets
+
+on:
+  schedule:
+    # Run weekly on Sunday at 2 AM
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      days_offline:
+        description: 'Remove targets offline for more than X days'
+        required: false
+        default: '7'
+        type: string
+      dry_run:
+        description: 'Dry run - only show what would be deleted'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  cleanup:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Find and Remove Orphaned Octopus Targets
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          DAYS_OFFLINE="${{ inputs.days_offline || '7' }}"
+          DRY_RUN="${{ inputs.dry_run || 'true' }}"
+          
+          echo "🔍 Searching for Octopus targets offline for more than $DAYS_OFFLINE days..."
+          echo "Dry run: $DRY_RUN"
+          
+          # Get all deployment targets
+          TARGETS=$(curl -s -H "X-Octopus-ApiKey: $OCTOPUS_API_KEY" \
+            "$OCTOPUS_SERVER_URL/api/$OCTOPUS_SPACE_ID/machines" | jq -r '.Items[]')
+          
+          # Calculate cutoff date (X days ago)
+          CUTOFF_DATE=$(date -u -d "$DAYS_OFFLINE days ago" +%Y-%m-%dT%H:%M:%S 2>/dev/null || \
+                        date -u -v-${DAYS_OFFLINE}d +%Y-%m-%dT%H:%M:%S)
+          
+          REMOVED_COUNT=0
+          SKIPPED_COUNT=0
+          
+          # Process each target
+          echo "$TARGETS" | jq -c '.' | while read -r target; do
+            TARGET_ID=$(echo "$target" | jq -r '.Id')
+            TARGET_NAME=$(echo "$target" | jq -r '.Name')
+            TARGET_STATUS=$(echo "$target" | jq -r '.HealthStatus')
+            LAST_SEEN=$(echo "$target" | jq -r '.StatusSummary // empty')
+            
+            # Check if target is unavailable/offline
+            if [[ "$TARGET_STATUS" == "Unavailable" ]] || [[ "$TARGET_STATUS" == "Offline" ]]; then
+              echo "Found offline target: $TARGET_NAME (ID: $TARGET_ID, Status: $TARGET_STATUS)"
+              
+              # Get machine details for last health check
+              MACHINE_DETAILS=$(curl -s -H "X-Octopus-ApiKey: $OCTOPUS_API_KEY" \
+                "$OCTOPUS_SERVER_URL/api/$OCTOPUS_SPACE_ID/machines/$TARGET_ID")
+              
+              LAST_HEALTH_CHECK=$(echo "$MACHINE_DETAILS" | jq -r '.HealthStatus.LastHealthCheckUtc // empty')
+              
+              if [ -n "$LAST_HEALTH_CHECK" ]; then
+                # Compare dates
+                if [[ "$LAST_HEALTH_CHECK" < "$CUTOFF_DATE" ]]; then
+                  echo "  ⚠️  Last seen: $LAST_HEALTH_CHECK (older than $DAYS_OFFLINE days)"
+                  
+                  if [ "$DRY_RUN" = "true" ]; then
+                    echo "  [DRY RUN] Would remove: $TARGET_NAME"
+                    REMOVED_COUNT=$((REMOVED_COUNT + 1))
+                  else
+                    echo "  🗑️  Removing: $TARGET_NAME"
+                    curl -s -X DELETE -H "X-Octopus-ApiKey: $OCTOPUS_API_KEY" \
+                      "$OCTOPUS_SERVER_URL/api/$OCTOPUS_SPACE_ID/machines/$TARGET_ID"
+                    REMOVED_COUNT=$((REMOVED_COUNT + 1))
+                  fi
+                else
+                  echo "  ✓ Last seen: $LAST_HEALTH_CHECK (within $DAYS_OFFLINE days, keeping)"
+                  SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                fi
+              else
+                echo "  ⚠️  No health check data available, skipping"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+              fi
+            fi
+          done
+          
+          echo ""
+          echo "📊 Summary:"
+          echo "  Targets removed: $REMOVED_COUNT"
+          echo "  Targets skipped: $SKIPPED_COUNT"
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo ""
+            echo "ℹ️  This was a dry run. No targets were actually removed."
+            echo "   Set dry_run=false to perform actual cleanup."
+          fi
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "✅ Octopus cleanup completed"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "ℹ️  Dry run mode - no changes made"
+          fi

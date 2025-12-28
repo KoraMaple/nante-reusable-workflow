@@ -53,6 +53,22 @@ on:
         description: 'Skip Terraform provisioning (use existing VM)'
         required: false
         default: false
+      # Octopus Deploy configuration
+      octopus_environment:
+        type: string
+        description: 'Octopus Deploy environment (Development, Staging, Production)'
+        required: false
+        default: 'Development'
+      octopus_roles:
+        type: string
+        description: 'Comma-separated Octopus roles (e.g., web-server,nginx)'
+        required: false
+        default: ''
+      skip_octopus:
+        type: boolean
+        description: 'Skip Octopus Tentacle registration'
+        required: false
+        default: false
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -130,6 +146,32 @@ jobs:
           export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
           export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
           
+          # Set Tailscale credentials for Terraform provider
+          export TAILSCALE_OAUTH_CLIENT_ID="$TAILSCALE_OAUTH_CLIENT_ID"
+          export TAILSCALE_OAUTH_CLIENT_SECRET="$TAILSCALE_OAUTH_CLIENT_SECRET"
+          export TAILSCALE_TAILNET="${TAILSCALE_TAILNET:--}"
+          
+          # Create Tailscale cloud-init snippet
+          TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
+          if [ -z "$TAILSCALE_AUTH_KEY" ]; then
+            # First run - need to create the key
+            echo "Creating Tailscale auth key..."
+          fi
+          
+          # Generate cloud-init snippet for Tailscale
+          cat > /tmp/${{ inputs.app_name }}-tailscale.yml <<CLOUDINIT
+          #cloud-config
+          runcmd:
+            - curl -fsSL https://tailscale.com/install.sh | sh
+            - tailscale up --authkey=\${TAILSCALE_AUTH_KEY} --hostname=${{ inputs.app_name }} --accept-routes
+            - timeout 30 sh -c 'until tailscale status --json | grep -q "\"Online\":true"; do sleep 2; done' || true
+          CLOUDINIT
+          
+          # Upload to Proxmox snippets directory (requires SSH access or NFS mount)
+          # For now, we'll note this in the output
+          echo "📝 Cloud-init snippet created at /tmp/${{ inputs.app_name }}-tailscale.yml"
+          echo "Note: Upload to Proxmox at /var/lib/vz/snippets/${{ inputs.app_name }}-tailscale.yml"
+          
           # Terraform Plan
           terraform plan \
             -var="app_name=${{ inputs.app_name }}" \
@@ -141,10 +183,15 @@ jobs:
             -var="proxmox_target_node=${{ inputs.proxmox_node }}" \
             -var="proxmox_storage=${{ inputs.proxmox_storage }}" \
             -var="vm_template=${{ inputs.vm_template }}" \
+            -var="enable_tailscale_terraform=false" \
             -out=tfplan
           
           # Terraform Apply
           terraform apply tfplan
+          
+          # Get Tailscale auth key for Ansible
+          export TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key)
+          echo "TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY" >> $GITHUB_ENV
           EOF
 
       - name: Wait for VM to boot and SSH to be ready
@@ -231,4 +278,42 @@ jobs:
             --extra-vars "target_hostname=${{ inputs.app_name }}" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}"
+          EOF
+
+      - name: Register with Octopus Deploy
+        if: ${{ inputs.skip_octopus != true }}
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Setup SSH agent
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          # Parse roles from comma-separated string
+          ROLES_ARRAY=()
+          if [ -n "${{ inputs.octopus_roles }}" ]; then
+            IFS=',' read -ra ROLES_ARRAY <<< "${{ inputs.octopus_roles }}"
+          fi
+          
+          # Build extra vars for Octopus
+          OCTOPUS_VARS="octopus_environment=${{ inputs.octopus_environment }}"
+          
+          if [ ${#ROLES_ARRAY[@]} -gt 0 ]; then
+            ROLES_JSON=$(printf '%s\n' "${ROLES_ARRAY[@]}" | jq -R . | jq -s .)
+            OCTOPUS_VARS="$OCTOPUS_VARS target_roles=$ROLES_JSON"
+          fi
+          
+          # Run octopus-tentacle role
+          echo "Registering ${{ inputs.app_name }} with Octopus Deploy..."
+          ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
+            --user deploy \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ inputs.app_name }}" \
+            --extra-vars "app_role_name=octopus-tentacle" \
+            --extra-vars "$OCTOPUS_VARS"
+          
+          echo "✓ Successfully registered with Octopus Deploy"
           EOF

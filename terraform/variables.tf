@@ -82,3 +82,9 @@ variable "vm_template" {
   default     = "ubuntu-2404-template"
   description = "VM template to clone from"
 }
+
+variable "enable_tailscale_terraform" {
+  type        = bool
+  default     = true
+  description = "Enable Tailscale installation via Terraform (cloud-init). If false, Ansible will handle Tailscale."
+}

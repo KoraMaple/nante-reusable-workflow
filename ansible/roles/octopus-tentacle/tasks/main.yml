@@ -1,0 +1,131 @@
+---
+# Octopus Tentacle installation and configuration
+
+- name: Validate Octopus Server URL is set
+  fail:
+    msg: "OCTOPUS_SERVER_URL is not defined. Cannot configure Octopus Tentacle."
+  when: octopus_server_url is not defined or octopus_server_url | length == 0
+
+- name: Validate Octopus API Key is set
+  fail:
+    msg: "OCTOPUS_API_KEY is not defined. Cannot configure Octopus Tentacle."
+  when: octopus_api_key is not defined or octopus_api_key | length == 0
+
+- name: Install required packages
+  apt:
+    name:
+      - curl
+      - jq
+      - libicu-dev
+    state: present
+    update_cache: yes
+
+- name: Create Octopus directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ tentacle_install_dir }}"
+    - "{{ tentacle_app_dir }}"
+    - "{{ tentacle_config_dir }}"
+
+- name: Check if Tentacle is already installed
+  stat:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+  register: tentacle_binary
+
+- name: Download Octopus Tentacle
+  get_url:
+    url: "{{ tentacle_download_url }}"
+    dest: "/tmp/tentacle-linux_x64.tar.gz"
+    mode: '0644'
+  when: not tentacle_binary.stat.exists
+
+- name: Extract Octopus Tentacle
+  unarchive:
+    src: "/tmp/tentacle-linux_x64.tar.gz"
+    dest: "{{ tentacle_install_dir }}"
+    remote_src: yes
+    creates: "{{ tentacle_install_dir }}/Tentacle"
+  when: not tentacle_binary.stat.exists
+
+- name: Create Tentacle instance
+  command: >
+    {{ tentacle_install_dir }}/Tentacle create-instance
+    --instance "{{ tentacle_instance_name }}"
+    --config "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
+  args:
+    creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
+
+- name: Configure Tentacle
+  command: >
+    {{ tentacle_install_dir }}/Tentacle configure
+    --instance "{{ tentacle_instance_name }}"
+    --home "{{ tentacle_install_dir }}"
+    --app "{{ tentacle_app_dir }}"
+    --port "{{ tentacle_port }}"
+    --noListen "{{ 'True' if tentacle_communication_mode == 'Polling' else 'False' }}"
+  args:
+    creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
+
+- name: Register Tentacle with Octopus Server (Polling mode)
+  command: >
+    {{ tentacle_install_dir }}/Tentacle register-with
+    --instance "{{ tentacle_instance_name }}"
+    --server "{{ octopus_server_url }}"
+    --apiKey "{{ octopus_api_key }}"
+    --name "{{ target_name }}"
+    --space "{{ octopus_space_id }}"
+    --environment "{{ octopus_environment }}"
+    --comms-style "TentacleActive"
+    {{ '--role "' + target_roles | join('" --role "') + '"' if target_roles | length > 0 else '' }}
+    {{ '--tenant "' + target_tenants | join('" --tenant "') + '"' if target_tenants | length > 0 else '' }}
+  when: tentacle_communication_mode == "Polling"
+  no_log: true
+  register: tentacle_register
+  changed_when: "'already exists' not in tentacle_register.stdout"
+  failed_when: 
+    - tentacle_register.rc != 0
+    - "'already exists' not in tentacle_register.stdout"
+
+- name: Register Tentacle with Octopus Server (Listening mode)
+  command: >
+    {{ tentacle_install_dir }}/Tentacle register-with
+    --instance "{{ tentacle_instance_name }}"
+    --server "{{ octopus_server_url }}"
+    --apiKey "{{ octopus_api_key }}"
+    --name "{{ target_name }}"
+    --space "{{ octopus_space_id }}"
+    --environment "{{ octopus_environment }}"
+    --comms-style "TentaclePassive"
+    --publicHostName "{{ ansible_default_ipv4.address }}"
+    {{ '--role "' + target_roles | join('" --role "') + '"' if target_roles | length > 0 else '' }}
+    {{ '--tenant "' + target_tenants | join('" --tenant "') + '"' if target_tenants | length > 0 else '' }}
+  when: tentacle_communication_mode == "Listening"
+  no_log: true
+  register: tentacle_register_listening
+  changed_when: "'already exists' not in tentacle_register_listening.stdout"
+  failed_when: 
+    - tentacle_register_listening.rc != 0
+    - "'already exists' not in tentacle_register_listening.stdout"
+
+- name: Install Tentacle systemd service
+  command: >
+    {{ tentacle_install_dir }}/Tentacle service
+    --instance "{{ tentacle_instance_name }}"
+    --install
+  args:
+    creates: "/etc/systemd/system/tentacle.service"
+  notify: Reload systemd
+
+- name: Ensure Tentacle service is enabled and started
+  systemd:
+    name: tentacle
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: Display Tentacle registration status
+  debug:
+    msg: "Tentacle registered as '{{ target_name }}' in environment '{{ octopus_environment }}'"

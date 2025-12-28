@@ -1,29 +1,4 @@
-terraform {
-  backend "s3" {
-    # MinIO configuration - values provided via -backend-config in workflow
-    # bucket, endpoints, access_key, secret_key are passed at init time
-    key                         = "terraform.tfstate"
-    region                      = "us-east-1"  # Required but ignored by MinIO
-    skip_credentials_validation = true
-    skip_metadata_api_check     = true
-    skip_region_validation      = true
-    skip_requesting_account_id  = true
-    use_path_style              = true  # Required for MinIO
-    skip_s3_checksum            = true  # Disable checksums for MinIO compatibility
-  }
-  required_providers {
-    proxmox = {
-      source  = "Telmate/proxmox"
-      version = "3.0.2-rc07"
-    }
-  }
-}
-provider "proxmox" {
-  pm_api_url          = var.proxmox_api_url
-  pm_api_token_id     = var.proxmox_api_token_id
-  pm_api_token_secret = var.proxmox_api_token_secret
-  pm_tls_insecure     = true
-}
+# Terraform configuration moved to providers.tf
 resource "random_id" "vm_suffix" {
   byte_length = 2
 }
@@ -92,6 +67,11 @@ resource "proxmox_vm_qemu" "generic_vm" {
  
   # Important: trimspace ensures no leading/trailing whitespace breaks the key
   sshkeys = trimspace(var.ssh_public_key)
+  
+  # Tailscale installation via cloud-init snippets
+  # Note: This uses Proxmox's cicustom feature which requires snippets to be pre-uploaded
+  # The workflow will handle creating and uploading the snippet
+  cicustom = var.enable_tailscale_terraform ? "user=local:snippets/${var.app_name}-tailscale.yml" : ""
   
   # Ensure correct boot order
   boot = "order=scsi0;ide2;net0"

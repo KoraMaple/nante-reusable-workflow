@@ -21,6 +21,22 @@ on:
         description: 'Application Role (e.g. nginx)'
         required: false
         default: ''
+      # Octopus Deploy configuration
+      octopus_environment:
+        type: string
+        description: 'Octopus Deploy environment (Development, Staging, Production)'
+        required: false
+        default: 'Development'
+      octopus_roles:
+        type: string
+        description: 'Comma-separated Octopus roles (e.g., web-server,nginx)'
+        required: false
+        default: ''
+      skip_octopus:
+        type: boolean
+        description: 'Skip Octopus Tentacle registration'
+        required: false
+        default: false
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -81,4 +97,42 @@ jobs:
             --ssh-common-args='-o StrictHostKeyChecking=no' \
             --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
             --extra-vars "app_role_name=${{ inputs.app_role }}"
+          EOF
+
+      - name: Register with Octopus Deploy
+        if: ${{ inputs.skip_octopus != true }}
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Setup SSH agent
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          # Parse roles from comma-separated string
+          ROLES_ARRAY=()
+          if [ -n "${{ inputs.octopus_roles }}" ]; then
+            IFS=',' read -ra ROLES_ARRAY <<< "${{ inputs.octopus_roles }}"
+          fi
+          
+          # Build extra vars for Octopus
+          OCTOPUS_VARS="octopus_environment=${{ inputs.octopus_environment }}"
+          
+          if [ ${#ROLES_ARRAY[@]} -gt 0 ]; then
+            ROLES_JSON=$(printf '%s\n' "${ROLES_ARRAY[@]}" | jq -R . | jq -s .)
+            OCTOPUS_VARS="$OCTOPUS_VARS target_roles=$ROLES_JSON"
+          fi
+          
+          # Run octopus-tentacle role
+          echo "Registering ${{ inputs.target_hostname }} with Octopus Deploy..."
+          ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
+            --user "${{ inputs.ssh_user }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
+            --extra-vars "app_role_name=octopus-tentacle" \
+            --extra-vars "$OCTOPUS_VARS"
+          
+          echo "✓ Successfully registered with Octopus Deploy"
           EOF

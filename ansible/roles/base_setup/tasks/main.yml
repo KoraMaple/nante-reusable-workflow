@@ -40,17 +40,42 @@
     enabled: yes
   when: virt_type.stdout in ['kvm', 'qemu']
 
-- name: Install Tailscale
-  shell: "curl -fsSL https://tailscale.com/install.sh | sh"
-  args:
-    creates: /usr/bin/tailscale
+- name: Check if Tailscale is already configured
+  command: tailscale status --json
+  register: tailscale_status
+  failed_when: false
+  changed_when: false
 
-- name: Connect to Tailscale
-  command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }}"
-  environment:
-    TS_AUTHKEY: "{{ ts_authkey }}"
-  register: tailscale_result
-  changed_when: "'Success' in tailscale_result.stdout"
+- name: Install and configure Tailscale (if not managed by Terraform)
+  when: tailscale_status.rc != 0
+  block:
+    - name: Install Tailscale
+      shell: "curl -fsSL https://tailscale.com/install.sh | sh"
+      args:
+        creates: /usr/bin/tailscale
+
+    - name: Connect to Tailscale
+      command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }}"
+      environment:
+        TS_AUTHKEY: "{{ ts_authkey }}"
+      register: tailscale_result
+      changed_when: "'Success' in tailscale_result.stdout or tailscale_result.rc == 0"
+      failed_when: false
+
+- name: Verify Tailscale is connected
+  when: tailscale_status.rc != 0
+  block:
+    - name: Wait for Tailscale to be online
+      command: tailscale status --json
+      register: tailscale_check
+      until: tailscale_check.stdout | from_json | json_query('Self.Online') == true
+      retries: 10
+      delay: 3
+      failed_when: false
+
+- name: Display Tailscale status
+  debug:
+    msg: "Tailscale is {{ 'already configured' if tailscale_status.rc == 0 else 'newly configured' }}"
 
 - name: Debug Observability Connection Vars
   debug:
