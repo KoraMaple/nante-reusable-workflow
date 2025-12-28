@@ -80,6 +80,31 @@ Define tags in your Tailscale ACL policy:
 
 ## How It Works
 
+### Automatic Cleanup with Ephemeral Keys
+
+**Key Configuration:**
+```hcl
+resource "tailscale_tailnet_key" "vm_auth_key" {
+  reusable      = true
+  ephemeral     = true  # ← Device auto-removed when offline
+  preauthorized = true
+  expiry        = 7776000  # 90 days
+}
+```
+
+**What happens:**
+1. Terraform creates ephemeral auth key
+2. Ansible installs Tailscale using this key
+3. Device registers in Tailnet
+4. **When VM destroyed** → Device goes offline → **Tailscale auto-removes it**
+
+**Ephemeral vs Non-Ephemeral:**
+
+| Type | Behavior | Use Case |
+|------|----------|----------|
+| **Ephemeral** (default) | Auto-removed when offline | VMs that are destroyed/recreated |
+| **Non-Ephemeral** | Persists when offline | Long-lived infrastructure |
+
 ### Terraform Resources
 
 **`terraform/providers.tf`**
@@ -89,22 +114,6 @@ provider "tailscale" {
   # TAILSCALE_OAUTH_CLIENT_ID
   # TAILSCALE_OAUTH_CLIENT_SECRET
   # TAILSCALE_TAILNET
-}
-```
-
-**`terraform/tailscale.tf`**
-```hcl
-resource "tailscale_tailnet_key" "vm_auth_key" {
-  reusable      = true
-  ephemeral     = false
-  preauthorized = true
-  expiry        = 7776000  # 90 days
-  
-  tags = [
-    "tag:terraform-managed",
-    "tag:proxmox-vm",
-    "tag:${var.environment}"
-  ]
 }
 ```
 
@@ -200,9 +209,15 @@ tailscale status --json | jq '.Self'
 cd terraform/
 terraform destroy -var="app_name=test-vm"
 
+# Wait a few minutes (Tailscale checks device status periodically)
 # Check Tailscale admin console
-# Device should be removed automatically
+# Device should be removed automatically (ephemeral devices removed when offline)
 ```
+
+**Timeline:**
+- VM destroyed → Device goes offline immediately
+- Tailscale detects offline status → Within 1-5 minutes
+- Device automatically removed → Ephemeral cleanup triggered
 
 ## Troubleshooting
 

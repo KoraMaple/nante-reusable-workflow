@@ -1,5 +1,81 @@
 # Troubleshooting Guide
 
+## Workflow Failures and Retries
+
+### VM Already Exists Error
+
+**Symptom:**
+```
+Error: VM 104 already running
+  with proxmox_vm_qemu.generic_vm
+```
+
+**Cause:**
+Workflow failed after VM was created but before Ansible completed. Re-running the workflow tries to create the VM again.
+
+**Solution:**
+The workflow now automatically detects existing VMs and skips Terraform apply. Simply **re-run the workflow** - it will:
+1. Detect VM exists in Terraform state
+2. Skip VM creation
+3. Proceed directly to Ansible configuration
+
+**Manual Recovery (if needed):**
+```bash
+# Option 1: Import existing VM into Terraform state
+cd terraform/
+terraform workspace select <app_name>
+terraform import proxmox_vm_qemu.generic_vm <proxmox_node>/qemu/<vm_id>
+
+# Option 2: Destroy and start fresh
+terraform destroy
+# Then re-run workflow
+```
+
+### Tailscale Tag Error
+
+**Symptom:**
+```
+Error: Failed to create key
+requested tags [tag:terraform-managed tag:proxmox-vm tag:***] are invalid
+or not permitted (400)
+```
+
+**Cause:**
+Tailscale tags must be defined in your Tailscale ACL policy before they can be used.
+
+**Solution 1: Remove Tags (Quick Fix)**
+Tags are now commented out by default in `terraform/tailscale.tf`. No action needed.
+
+**Solution 2: Configure ACL (Recommended)**
+1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/acls)
+2. Add tag definitions to your ACL policy:
+```json
+{
+  "tagOwners": {
+    "tag:terraform-managed": ["autogroup:admin"],
+    "tag:proxmox-vm": ["autogroup:admin"],
+    "tag:dev": ["autogroup:admin"],
+    "tag:prod": ["autogroup:admin"]
+  }
+}
+```
+3. Save ACL policy
+4. Uncomment tags in `terraform/tailscale.tf`
+5. Re-run workflow
+
+### Ansible Fails After Terraform Success
+
+**Symptom:**
+Terraform creates VM successfully, but Ansible configuration fails.
+
+**Solution:**
+Re-run the workflow. It will:
+1. Detect existing VM
+2. Skip Terraform
+3. Retry Ansible configuration
+
+The workflow is now idempotent and safe to retry.
+
 ## SSH Permission Denied (Password Authentication)
 
 ### Symptom

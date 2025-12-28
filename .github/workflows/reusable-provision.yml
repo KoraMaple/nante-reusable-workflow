@@ -140,6 +140,24 @@ jobs:
           # Select workspace
           terraform workspace select ${{ inputs.app_name }} || terraform workspace new ${{ inputs.app_name }}
           
+          # Check if VM already exists (for retry scenarios)
+          if terraform state list | grep -q "proxmox_vm_qemu.generic_vm"; then
+            echo "⚠️  VM already exists in Terraform state"
+            echo "This is likely a retry after a previous failure"
+            echo "Skipping Terraform apply, proceeding to Ansible configuration..."
+            
+            # Still need to ensure Tailscale key exists
+            if ! terraform state list | grep -q "tailscale_tailnet_key.vm_auth_key"; then
+              echo "Creating Tailscale auth key..."
+              terraform apply -target=tailscale_tailnet_key.vm_auth_key -auto-approve \
+                -var="app_name=${{ inputs.app_name }}" \
+                -var="environment=${{ inputs.environment }}"
+            fi
+            
+            # Skip to Ansible
+            exit 0
+          fi
+          
           # Set Proxmox credentials
           export TF_VAR_proxmox_api_url="$PROXMOX_API_URL"
           export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
@@ -187,11 +205,21 @@ jobs:
             -out=tfplan
           
           # Terraform Apply
-          terraform apply tfplan
+          if ! terraform apply tfplan; then
+            echo "❌ Terraform apply failed"
+            echo "If VM was partially created, you can:"
+            echo "1. Re-run this workflow (it will detect existing VM and skip to Ansible)"
+            echo "2. Or manually destroy: cd terraform && terraform destroy"
+            exit 1
+          fi
           
           # Get Tailscale auth key for Ansible
-          export TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key)
-          echo "TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY" >> $GITHUB_ENV
+          export TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
+          if [ -n "$TAILSCALE_AUTH_KEY" ]; then
+            echo "TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY" >> $GITHUB_ENV
+          else
+            echo "⚠️  No Tailscale auth key found - Ansible will use fallback TS_AUTHKEY"
+          fi
           EOF
 
       - name: Wait for VM to boot and SSH to be ready

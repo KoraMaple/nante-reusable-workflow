@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed separate Octopus registration steps from workflows
 - Simplified workflow usage - just pass `octopus_environment` and `octopus_roles` as inputs
 
+### Changed
+- **Tailscale auth keys now ephemeral** - Devices automatically removed when VM destroyed (no manual cleanup needed)
+
+### Fixed
+- **Workflow retry handling** - Workflows now detect existing VMs and skip Terraform apply on retry
+- **Tailscale tags removed by default** - Tags must be configured in ACL first, now commented out to prevent errors
+- Added error handling for Terraform apply failures with helpful recovery instructions
+- Improved idempotency for failed workflow retries
+- **Tailscale device cleanup** - Using ephemeral keys ensures devices don't orphan when VMs destroyed
+
 ## [1.0.0] - 2024-12-27 - Phase 2 Complete
 
 ### Added

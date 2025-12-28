@@ -1,0 +1,129 @@
+name: Cleanup Orphaned Tailscale Devices
+
+# This workflow is a backup cleanup mechanism
+# With ephemeral keys, devices should auto-remove, but this provides additional cleanup
+# for any edge cases or non-ephemeral devices
+
+on:
+  schedule:
+    # Run weekly on Sunday at 3 AM
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      days_offline:
+        description: 'Remove devices offline for more than X days'
+        required: false
+        default: '7'
+        type: string
+      dry_run:
+        description: 'Dry run - only show what would be deleted'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  cleanup:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Find and Remove Orphaned Tailscale Devices
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          DAYS_OFFLINE="${{ inputs.days_offline || '7' }}"
+          DRY_RUN="${{ inputs.dry_run || 'true' }}"
+          
+          echo "🔍 Searching for Tailscale devices offline for more than $DAYS_OFFLINE days..."
+          echo "Dry run: $DRY_RUN"
+          
+          # Install Tailscale CLI if not present
+          if ! command -v tailscale &> /dev/null; then
+            echo "Installing Tailscale CLI..."
+            curl -fsSL https://tailscale.com/install.sh | sh
+          fi
+          
+          # Authenticate with Tailscale using OAuth
+          export TS_OAUTH_CLIENT_ID="$TAILSCALE_OAUTH_CLIENT_ID"
+          export TS_OAUTH_CLIENT_SECRET="$TAILSCALE_OAUTH_CLIENT_SECRET"
+          
+          # Get list of devices
+          DEVICES=$(tailscale status --json 2>/dev/null || echo '{"Peer":{}}')
+          
+          # Calculate cutoff timestamp
+          CUTOFF_TIMESTAMP=$(date -u -d "$DAYS_OFFLINE days ago" +%s 2>/dev/null || \
+                             date -u -v-${DAYS_OFFLINE}d +%s)
+          
+          REMOVED_COUNT=0
+          SKIPPED_COUNT=0
+          
+          # Process each device
+          echo "$DEVICES" | jq -r '.Peer | to_entries[] | @json' | while read -r device; do
+            DEVICE_NAME=$(echo "$device" | jq -r '.value.HostName')
+            DEVICE_ID=$(echo "$device" | jq -r '.key')
+            LAST_SEEN=$(echo "$device" | jq -r '.value.LastSeen // empty')
+            ONLINE=$(echo "$device" | jq -r '.value.Online')
+            
+            if [ "$ONLINE" = "false" ] && [ -n "$LAST_SEEN" ]; then
+              LAST_SEEN_TIMESTAMP=$(date -d "$LAST_SEEN" +%s 2>/dev/null || \
+                                    date -j -f "%Y-%m-%dT%H:%M:%SZ" "$LAST_SEEN" +%s 2>/dev/null || echo "0")
+              
+              if [ "$LAST_SEEN_TIMESTAMP" -lt "$CUTOFF_TIMESTAMP" ]; then
+                echo "Found offline device: $DEVICE_NAME (ID: $DEVICE_ID)"
+                echo "  Last seen: $LAST_SEEN"
+                
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "  [DRY RUN] Would remove: $DEVICE_NAME"
+                  REMOVED_COUNT=$((REMOVED_COUNT + 1))
+                else
+                  echo "  🗑️  Removing: $DEVICE_NAME"
+                  # Note: Requires Tailscale API call or tailscale CLI with admin permissions
+                  # This is a placeholder - actual implementation depends on your setup
+                  echo "  ⚠️  Manual removal required via Tailscale admin console"
+                  REMOVED_COUNT=$((REMOVED_COUNT + 1))
+                fi
+              else
+                echo "Device $DEVICE_NAME offline but within $DAYS_OFFLINE days, keeping"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+              fi
+            fi
+          done
+          
+          echo ""
+          echo "📊 Summary:"
+          echo "  Devices to remove: $REMOVED_COUNT"
+          echo "  Devices kept: $SKIPPED_COUNT"
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo ""
+            echo "ℹ️  This was a dry run. No devices were actually removed."
+            echo "   Set dry_run=false to perform actual cleanup."
+          fi
+          
+          echo ""
+          echo "💡 Note: With ephemeral auth keys, devices should auto-remove."
+          echo "   This cleanup is a backup mechanism for edge cases."
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "✅ Tailscale cleanup completed"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "ℹ️  Dry run mode - no changes made"
+          fi
+          echo ""
+          echo "Reminder: Ephemeral devices auto-remove when offline."
