@@ -2,3 +2,22 @@
 # Default values if not provided by GitHub
 target_hostname: "unnamed-vm"
 app_role_name: ""
+
+# Default variables for base_setup role
+# These can be overridden at playbook level
+
+# Observability endpoints
+oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') | regex_replace(':[0-9]+$', '') }}"
+
+# Tailscale
+ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
+
+# Target hostname for labeling
+# target_hostname: "{{ inventory_hostname }}"
+
+# Octopus Deploy (optional - if not set, Tentacle installation is skipped)
+octopus_server_url: "{{ lookup('env', 'OCTOPUS_SERVER_URL') }}"
+octopus_api_key: "{{ lookup('env', 'OCTOPUS_API_KEY') }}"
+octopus_space_id: "{{ lookup('env', 'OCTOPUS_SPACE_ID') | default('Spaces-1', true) }}"
+octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
+octopus_roles: []  # List of roles, can be overridden via extra-vars

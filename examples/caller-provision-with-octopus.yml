@@ -28,7 +28,7 @@ jobs:
       disk_gb: "20G"
       # Octopus Deploy configuration
       octopus_environment: ${{ inputs.environment }}
-      octopus_roles: "web-server,nginx"
+      octopus_roles: "web-server,${{ inputs.app_name }}"
     secrets:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}

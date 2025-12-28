@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Octopus Tentacle now part of base_setup** - Every VM automatically gets Octopus Tentacle installed and registered as part of standard provisioning (no separate step needed)
+- Removed separate Octopus registration steps from workflows
+- Simplified workflow usage - just pass `octopus_environment` and `octopus_roles` as inputs
+
 ## [1.0.0] - 2024-12-27 - Phase 2 Complete
 
 ### Added

@@ -91,48 +91,22 @@ jobs:
           fi
           echo "✓ Ansible connectivity confirmed"
           
-          # Run playbook
-          ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
-            --user "${{ inputs.ssh_user }}" \
-            --ssh-common-args='-o StrictHostKeyChecking=no' \
-            --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
-            --extra-vars "app_role_name=${{ inputs.app_role }}"
-          EOF
-
-      - name: Register with Octopus Deploy
-        if: ${{ inputs.skip_octopus != true }}
-        run: |
-          doppler run -- bash <<'EOF'
-          set -e
-          
-          # Setup SSH agent
-          eval $(ssh-agent -s)
-          echo "$SSH_PRIVATE_KEY" | ssh-add -
-          
-          cd ansible/
-          
-          # Parse roles from comma-separated string
-          ROLES_ARRAY=()
+          # Parse Octopus roles from comma-separated string to JSON array
+          OCTOPUS_ROLES_JSON="[]"
           if [ -n "${{ inputs.octopus_roles }}" ]; then
-            IFS=',' read -ra ROLES_ARRAY <<< "${{ inputs.octopus_roles }}"
+            OCTOPUS_ROLES_JSON=$(echo "${{ inputs.octopus_roles }}" | jq -R 'split(",") | map(select(length > 0))')
           fi
           
-          # Build extra vars for Octopus
-          OCTOPUS_VARS="octopus_environment=${{ inputs.octopus_environment }}"
-          
-          if [ ${#ROLES_ARRAY[@]} -gt 0 ]; then
-            ROLES_JSON=$(printf '%s\n' "${ROLES_ARRAY[@]}" | jq -R . | jq -s .)
-            OCTOPUS_VARS="$OCTOPUS_VARS target_roles=$ROLES_JSON"
-          fi
-          
-          # Run octopus-tentacle role
-          echo "Registering ${{ inputs.target_hostname }} with Octopus Deploy..."
+          # Run playbook with Octopus configuration
+          # Octopus Tentacle is now part of base_setup, so it runs automatically
           ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
             --user "${{ inputs.ssh_user }}" \
             --ssh-common-args='-o StrictHostKeyChecking=no' \
             --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
-            --extra-vars "app_role_name=octopus-tentacle" \
-            --extra-vars "$OCTOPUS_VARS"
+            --extra-vars "app_role_name=${{ inputs.app_role }}" \
+            --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+            --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON"
           
-          echo "✓ Successfully registered with Octopus Deploy"
+          echo "✓ Infrastructure onboarded and configured"
+          echo "✓ Octopus Tentacle installed and registered"
           EOF

@@ -167,3 +167,18 @@
           url = "http://{{ oo_host }}:3100/loki/api/v1/push"
         }
       }
+
+# Octopus Deploy Tentacle Installation
+# Every VM should be registered with Octopus for deployment orchestration
+- name: Include Octopus Tentacle installation
+  include_role:
+    name: octopus-tentacle
+  vars:
+    target_name: "{{ target_hostname }}"
+    octopus_environment: "{{ octopus_environment | default('Development') }}"
+    target_roles: "{{ octopus_roles | default([]) }}"
+  when: 
+    - octopus_server_url is defined
+    - octopus_server_url | length > 0
+    - octopus_api_key is defined
+    - octopus_api_key | length > 0

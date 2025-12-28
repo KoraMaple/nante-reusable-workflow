@@ -9,6 +9,13 @@
     oo_pass: "{{ lookup('env', 'OO_PASS') }}"
     # Sanitize OO_HOST to ensure it's just the IP/Hostname (strip http://, https://, and :port)
     oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') | regex_replace(':[0-9]+$', '') }}"
+    
+    # Octopus Deploy configuration (from environment)
+    octopus_server_url: "{{ lookup('env', 'OCTOPUS_SERVER_URL') }}"
+    octopus_api_key: "{{ lookup('env', 'OCTOPUS_API_KEY') }}"
+    octopus_space_id: "{{ lookup('env', 'OCTOPUS_SPACE_ID') | default('Spaces-1', true) }}"
+    octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
+    # octopus_roles can be passed as extra-vars from workflow (list format)
   
   roles:
     # Run base_setup only if no app_role_name, or if app_role is not mgmt-docker

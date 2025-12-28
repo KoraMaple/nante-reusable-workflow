@@ -74,6 +74,8 @@ If using multiple spaces:
 
 ## Workflow Usage
 
+**Note:** As of v1.0.0, Octopus Tentacle installation is integrated into `base_setup` and runs automatically on every VM. You just need to provide the environment and roles.
+
 ### Provision New VM with Octopus Registration
 
 ```yaml
@@ -91,6 +93,12 @@ jobs:
       octopus_roles: "web-server,nginx"
     secrets: inherit
 ```
+
+**What happens:**
+1. Terraform provisions VM
+2. Ansible runs `base_setup` role
+3. `base_setup` automatically installs and registers Octopus Tentacle
+4. VM appears in Octopus Deploy as a healthy target
 
 ### Onboard Existing Infrastructure
 
@@ -110,6 +118,10 @@ jobs:
 
 ### Skip Octopus Registration
 
+To skip Octopus registration, simply don't set the Octopus secrets in Doppler, or set them to empty values. The `base_setup` role will automatically skip Octopus installation if the required variables are not set.
+
+Alternatively, you can override the variables:
+
 ```yaml
 jobs:
   provision:
@@ -118,8 +130,9 @@ jobs:
       app_name: "test-vm"
       vlan_tag: "20"
       vm_target_ip: "192.168.20.99"
-      skip_octopus: true  # Skip Octopus registration
     secrets: inherit
+    # Don't pass octopus_environment or octopus_roles
+    # Or ensure OCTOPUS_SERVER_URL is not set in Doppler
 ```
 
 ## Octopus Roles

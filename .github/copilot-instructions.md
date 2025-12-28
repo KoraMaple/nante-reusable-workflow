@@ -138,11 +138,13 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 - **Inventory:** Ad-hoc comma-separated IP list
 
 **Roles:**
-- **`base_setup`** (CRITICAL): Runs on all nodes
-  - Installs Tailscale and joins mesh
+- **`base_setup`**: Core system configuration
+  - Sets hostname
+  - Installs essential packages
+  - Configures Tailscale VPN (or skips if Terraform-managed)
   - Installs Grafana Alloy for observability
-  - System configuration (hostname, packages)
-  - QEMU guest agent (VMs only, auto-detected)
+  - Collects system metrics and logs
+  - Installs and registers Octopus Tentacle (if Octopus configured)
   
 - **`mgmt-docker`**: Docker host monitoring
   - Replaces `base_setup` for Docker servers
