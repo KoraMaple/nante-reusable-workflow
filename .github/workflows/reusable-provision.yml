@@ -47,6 +47,11 @@ on:
         description: 'VM template to clone'
         required: false
         default: 'ubuntu-2404-template'
+      environment:
+        type: string
+        description: 'Environment name (dev, staging, prod)'
+        required: false
+        default: 'dev'
       # Resource type selection
       resource_type:
         type: string

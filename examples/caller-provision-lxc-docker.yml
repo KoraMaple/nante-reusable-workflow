@@ -17,7 +17,7 @@ jobs:
       
       # Container configuration
       app_name: ${{ inputs.container_name }}
-      environment: dev
+      environment: 'dev'
       vm_target_ip: 192.168.20.101
       
       # Resources (more for Docker workloads)
