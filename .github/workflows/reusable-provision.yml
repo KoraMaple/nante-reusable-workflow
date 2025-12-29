@@ -302,7 +302,17 @@ jobs:
           # Parse Octopus roles from comma-separated string to JSON array
           OCTOPUS_ROLES_JSON="[]"
           if [ -n "${{ inputs.octopus_roles }}" ]; then
-            OCTOPUS_ROLES_JSON=$(echo "${{ inputs.octopus_roles }}" | jq -R 'split(",") | map(select(length > 0))')
+            # Simple bash parsing - no jq needed
+            IFS=',' read -ra ROLES <<< "${{ inputs.octopus_roles }}"
+            OCTOPUS_ROLES_JSON="["
+            for i in "${!ROLES[@]}"; do
+              ROLE=$(echo "${ROLES[$i]}" | xargs)  # trim whitespace
+              if [ -n "$ROLE" ]; then
+                [ "$i" -gt 0 ] && OCTOPUS_ROLES_JSON+=","
+                OCTOPUS_ROLES_JSON+="\"$ROLE\""
+              fi
+            done
+            OCTOPUS_ROLES_JSON+="]"
           fi
           
           # Run playbook with Octopus configuration
@@ -318,4 +328,9 @@ jobs:
           
           echo "✓ VM provisioned and configured"
           echo "✓ Octopus Tentacle installed and registered"
+          echo ""
+          echo "📋 Next steps:"
+          echo "  1. Check Tailscale admin console - device should appear within 1-2 minutes"
+          echo "  2. Check Octopus Deploy - target should be healthy"
+          echo "  3. SSH to VM: ssh deploy@${{ inputs.vm_target_ip }}"
           EOF

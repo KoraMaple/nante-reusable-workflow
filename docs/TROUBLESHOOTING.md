@@ -1,5 +1,58 @@
 # Troubleshooting Guide
 
+## Common Issues
+
+### Tailscale Device Not Appearing
+
+**Symptom:**
+Terraform completes successfully but device doesn't appear in Tailscale admin console.
+
+**Cause:**
+Tailscale is installed by Ansible, not Terraform. Device registration happens AFTER Terraform completes.
+
+**Timeline:**
+1. Terraform creates VM (1-2 minutes)
+2. VM boots and becomes SSH-accessible (30-60 seconds)
+3. Ansible runs and installs Tailscale (1-2 minutes)
+4. Device appears in Tailscale (immediately after Ansible completes)
+
+**Solution:**
+Wait for the complete workflow to finish. Check Tailscale admin console after you see:
+```
+✓ VM provisioned and configured
+✓ Octopus Tentacle installed and registered
+```
+
+**Verify:**
+```bash
+# SSH to VM
+ssh deploy@<vm-ip>
+
+# Check Tailscale status
+tailscale status
+
+# Should show connected
+```
+
+### Missing jq Command Error
+
+**Symptom:**
+```
+bash: line 25: jq: command not found
+Error: Process completed with exit code 127
+```
+
+**Cause:**
+Workflow tried to use `jq` which isn't installed on the runner.
+
+**Solution:**
+Fixed in latest version - workflows now use pure bash for JSON parsing (no `jq` dependency).
+
+If you see this error, pull latest changes:
+```bash
+git pull origin main
+```
+
 ## Workflow Failures and Retries
 
 ### VM Already Exists Error
