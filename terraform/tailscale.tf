@@ -17,7 +17,7 @@
 # Note: Tags must be defined in your Tailscale ACL policy first
 resource "tailscale_tailnet_key" "vm_auth_key" {
   reusable      = true
-  ephemeral     = true  # CHANGED: Device auto-removed when offline
+  ephemeral     = false
   preauthorized = true
   expiry        = 7776000  # 90 days
   description   = "Auth key for ${var.app_name} VM managed by Terraform"
