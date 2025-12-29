@@ -62,6 +62,9 @@ resource "proxmox_lxc" "container" {
       ssh_public_keys,
     ]
   }
+  
+  # Note: Rocky Linux LXC containers may take 2-3 minutes to fully boot and start SSH
+  # The workflow includes extended wait time (3 minutes) for LXC containers
 }
 
 # Output container ID

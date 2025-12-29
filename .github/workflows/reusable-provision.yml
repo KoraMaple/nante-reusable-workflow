@@ -287,27 +287,42 @@ jobs:
             exit 1
           fi
           
-          # Wait for SSH port to be open (up to 2 minutes)
-          echo "Waiting for SSH port 22..."
+          # Wait for SSH port to be open
+          # LXC containers (especially RHEL-based) may take longer to start SSH
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            MAX_ATTEMPTS=36  # 3 minutes for LXC
+            echo "Waiting for SSH port 22 (LXC may take up to 3 minutes)..."
+          else
+            MAX_ATTEMPTS=24  # 2 minutes for VMs
+            echo "Waiting for SSH port 22..."
+          fi
+          
           SSH_SUCCESS=false
-          for i in {1..24}; do
+          for i in $(seq 1 $MAX_ATTEMPTS); do
             if nc -z -w 2 ${{ inputs.vm_target_ip }} 22 2>/dev/null; then
               echo "✓ SSH port is open (attempt $i)"
               SSH_SUCCESS=true
               break
             fi
-            echo "Attempt $i/24: SSH not ready, waiting 5s..."
+            echo "Attempt $i/$MAX_ATTEMPTS: SSH not ready, waiting 5s..."
             sleep 5
           done
           
           if [ "$SSH_SUCCESS" = false ]; then
-            echo "❌ ERROR: SSH port did not open after 2 minutes"
-            echo "Check that:"
-            if [ "${{ inputs.resource_type }}" = "vm" ]; then
+            if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+              echo "❌ ERROR: SSH port did not open after 3 minutes"
+              echo "Check that:"
+              echo "  1. LXC container started successfully in Proxmox"
+              echo "  2. SSH service is installed and enabled (systemctl status sshd)"
+              echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+              echo "  4. Firewall is not blocking port 22"
+            else
+              echo "❌ ERROR: SSH port did not open after 2 minutes"
+              echo "Check that:"
               echo "  1. Cloud-init completed successfully"
+              echo "  2. SSH service is running"
+              echo "  3. Firewall is not blocking port 22"
             fi
-            echo "  2. SSH service is running"
-            echo "  3. Firewall is not blocking port 22"
             exit 1
           fi
           
