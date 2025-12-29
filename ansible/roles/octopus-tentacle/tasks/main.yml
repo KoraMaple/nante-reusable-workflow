@@ -109,7 +109,6 @@
     {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
     {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
   when: tentacle_communication_mode == "Polling"
-  no_log: true
   register: tentacle_register
   changed_when: "'already exists' not in tentacle_register.stdout and 'already exists' not in tentacle_register.stderr"
   failed_when: 
