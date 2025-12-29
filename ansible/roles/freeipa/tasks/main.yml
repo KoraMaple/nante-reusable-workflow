@@ -17,13 +17,28 @@
   set_fact:
     is_rhel: "{{ ansible_os_family == 'RedHat' }}"
 
-- name: Generate FreeIPA admin password
+- name: Generate and save FreeIPA admin password
   set_fact:
-    freeipa_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits,punctuation length=20') }}"
+    freeipa_admin_password: "{{ lookup('password', '/tmp/freeipa_admin_password chars=ascii_letters,digits length=10') }}"
 
-- name: Generate FreeIPA DS password
+- name: Generate and save FreeIPA DS password
   set_fact:
-    freeipa_ds_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits,punctuation length=20') }}"
+    freeipa_ds_password: "{{ lookup('password', '/tmp/freeipa_ds_password chars=ascii_letters,digits length=10') }}"
+
+- name: Read admin password from file
+  slurp:
+    src: /tmp/freeipa_admin_password
+  register: admin_password_file
+
+- name: Read DS password from file
+  slurp:
+    src: /tmp/freeipa_ds_password
+  register: ds_password_file
+
+- name: Set password facts from files
+  set_fact:
+    freeipa_admin_password: "{{ admin_password_file.content | b64decode | trim }}"
+    freeipa_ds_password: "{{ ds_password_file.content | b64decode | trim }}"
 
 - name: Set FreeIPA facts
   set_fact:
@@ -225,6 +240,15 @@
       command: ipa sudorule-mod owners_sudo --cmdcat=all
       register: sudo_add_cmds
       changed_when: "'Modified Sudo Rule' in sudo_add_cmds.stdout"
+
+- name: Clean up password files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/freeipa_admin_password
+    - /tmp/freeipa_ds_password
+  ignore_errors: yes
 
 - name: Display final setup information
   debug:
