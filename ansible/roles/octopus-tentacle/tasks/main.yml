@@ -47,8 +47,20 @@
     src: "/tmp/tentacle-linux_x64.tar.gz"
     dest: "{{ tentacle_install_dir }}"
     remote_src: yes
-    creates: "{{ tentacle_install_dir }}/Tentacle"
+    extra_opts: ['--strip-components=1']
   when: not tentacle_binary.stat.exists
+
+- name: Verify Tentacle binary exists
+  stat:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+  register: tentacle_verify
+  failed_when: not tentacle_verify.stat.exists
+
+- name: Make Tentacle executable
+  file:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+    mode: '0755'
+  when: tentacle_verify.stat.exists
 
 - name: Create Tentacle instance
   command: >
