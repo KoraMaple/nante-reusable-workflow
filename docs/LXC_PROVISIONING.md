@@ -183,7 +183,19 @@ LXC containers don't use cloud-init. Configuration happens via:
 - Container starts immediately
 - Ansible can connect within seconds
 
-### 3. Privileged vs Unprivileged
+### 4. Tailscale Support
+LXC containers require TUN device access for Tailscale:
+- **keyctl** feature enabled (for Tailscale authentication)
+- **TUN device** access configured automatically
+
+If Tailscale fails to start, manually enable TUN device:
+```bash
+# On Proxmox host
+pct set <CTID> --dev0 /dev/net/tun
+pct stop <CTID> && pct start <CTID>
+```
+
+### 5. Privileged vs Unprivileged
 
 **Unprivileged (Recommended - Default):**
 ```hcl

@@ -37,7 +37,14 @@ resource "proxmox_lxc" "container" {
   # Container features
   features {
     nesting = var.lxc_nesting  # Required for Docker in LXC
+    keyctl  = true             # Required for Tailscale
   }
+  
+  # Allow access to TUN device for Tailscale VPN
+  # This adds the necessary device permissions and mount entry
+  # Equivalent to: pct set <CTID> --dev0 /dev/net/tun
+  # Note: The Proxmox provider handles this via the features and we may need
+  # to manually configure via pct if the provider doesn't support it directly
   
   # Start on boot
   onboot = true

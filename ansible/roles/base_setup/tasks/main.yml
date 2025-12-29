@@ -1,7 +1,27 @@
 ---
-- name: Set system hostname
+# Detect if running in LXC container
+- name: Check virtualization type
+  shell: systemd-detect-virt
+  register: virt_type
+  changed_when: false
+  failed_when: false
+
+- name: Set LXC fact
+  set_fact:
+    is_lxc: "{{ virt_type.stdout == 'lxc' }}"
+
+# Hostname configuration
+- name: Set system hostname (non-LXC)
   hostname:
     name: "{{ target_hostname }}"
+  when: not is_lxc
+
+- name: Set hostname directly in LXC
+  shell: |
+    echo "{{ target_hostname }}" > /etc/hostname
+    hostname "{{ target_hostname }}"
+  when: is_lxc
+  changed_when: true
 
 - name: Update /etc/hosts with new hostname
   lineinfile:
@@ -17,21 +37,20 @@
       - ca-certificates
       - gpg
       - unzip
-      - rsyslog
     state: present
     update_cache: yes
+
+- name: Install rsyslog (non-LXC only)
+  apt:
+    name: rsyslog
+    state: present
+  when: not is_lxc
 
 - name: Update apt cache
   apt:
     update_cache: yes
     cache_valid_time: 3600
   become: yes
-
-- name: Check if running in a virtual machine
-  shell: systemd-detect-virt
-  register: virt_type
-  changed_when: false
-  failed_when: false
 
 - name: Install QEMU Guest Agent (VMs only)
   apt:
