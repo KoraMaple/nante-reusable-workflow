@@ -11,11 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LXC Container Support** - Provision LXC containers alongside VMs using Terraform
   - New `resource_type` input (vm or lxc)
   - LXC-specific variables: template, nesting, unprivileged
+  - Support for both unprivileged (secure, default) and privileged containers
   - Faster boot times (2-5 seconds vs 30-60 seconds)
   - Lower resource usage (shared kernel)
   - Full Ansible compatibility (base_setup, octopus-tentacle, Tailscale)
-  - Docker support via nesting feature
-  - Example workflows for standard and Docker-enabled LXC
+  - Docker support via nesting feature (works with unprivileged)
+  - Example workflows for standard, Docker-enabled, and privileged LXC
 - **Comprehensive LXC documentation** - Complete guide with prerequisites, configuration, and best practices
 - **Tailscale ACL setup guide** - Complete guide for configuring ephemeral keys with automatic cleanup
 

@@ -63,6 +63,11 @@ on:
         description: 'Enable nesting for Docker in LXC'
         required: false
         default: false
+      lxc_unprivileged:
+        type: boolean
+        description: 'Run LXC as unprivileged (recommended for security)'
+        required: false
+        default: true
       # Skip Terraform for existing VMs
       skip_terraform:
         type: boolean
@@ -221,6 +226,7 @@ jobs:
             -var="resource_type=${{ inputs.resource_type }}" \
             -var="lxc_template=${{ inputs.lxc_template }}" \
             -var="lxc_nesting=${{ inputs.lxc_nesting }}" \
+            -var="lxc_unprivileged=${{ inputs.lxc_unprivileged }}" \
             -var="enable_tailscale_terraform=false" \
             -out=tfplan
           

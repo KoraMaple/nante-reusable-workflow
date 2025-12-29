@@ -1,4 +1,4 @@
-name: Provision LXC Container Example
+name: Provision Privileged LXC Container Example
 
 on:
   workflow_dispatch:
@@ -6,10 +6,10 @@ on:
       container_name:
         description: 'Container name'
         required: true
-        default: 'web-app'
+        default: 'privileged-app'
 
 jobs:
-  provision-lxc:
+  provision-privileged-lxc:
     uses: ./.github/workflows/reusable-provision.yml
     with:
       # Resource type
@@ -18,17 +18,17 @@ jobs:
       # Container configuration
       app_name: ${{ inputs.container_name }}
       environment: dev
-      vm_target_ip: 192.168.20.100
+      vm_target_ip: 192.168.20.102
       
-      # Resources (LXC uses less than VMs)
+      # Resources
       cpu_cores: '2'
       ram_mb: '2048'
-      disk_gb: '8'
+      disk_gb: '10'
       
-      # LXC-specific
+      # LXC-specific - PRIVILEGED MODE
       lxc_template: 'local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst'
-      lxc_unprivileged: true  # Recommended for security
-      lxc_nesting: false  # Set to true for Docker support
+      lxc_unprivileged: false  # Run as privileged (full root access)
+      lxc_nesting: false
       
       # Infrastructure
       vlan_tag: '20'
@@ -37,7 +37,7 @@ jobs:
       
       # Octopus Deploy
       octopus_environment: 'Development'
-      octopus_roles: 'web-server,nodejs'
+      octopus_roles: 'legacy-app'
       
     secrets:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

@@ -180,21 +180,31 @@ LXC containers don't use cloud-init. Configuration happens via:
 
 ### 3. Privileged vs Unprivileged
 
-**Unprivileged (Recommended):**
+**Unprivileged (Recommended - Default):**
 ```hcl
-unprivileged = true
+lxc_unprivileged = true
 ```
-- Better security
-- User namespace isolation
-- Sufficient for most workloads
+- ✅ Better security
+- ✅ User namespace isolation
+- ✅ Sufficient for most workloads
+- ✅ Can run Docker with nesting enabled
+- ✅ Recommended for production
 
-**Privileged:**
+**Privileged (Use with Caution):**
 ```hcl
-unprivileged = false
+lxc_unprivileged = false
 ```
-- Required for Docker (unless using nesting)
-- Full root access
-- Less secure
+- ⚠️ Full root access to host
+- ⚠️ Less secure - container root = host root
+- ⚠️ Only use when absolutely necessary
+- Use cases:
+  - Legacy applications requiring full privileges
+  - Specific kernel features
+  - Hardware access requirements
+
+**Security Impact:**
+- **Unprivileged**: Container UID 0 (root) maps to unprivileged UID on host (e.g., 100000)
+- **Privileged**: Container UID 0 (root) = Host UID 0 (root) - DANGEROUS!
 
 ### 4. Nesting for Docker
 
@@ -393,7 +403,7 @@ cat /root/.ssh/authorized_keys
 
 ## Examples
 
-### Provision Ubuntu LXC
+### Provision Unprivileged LXC (Recommended)
 ```yaml
 uses: ./.github/workflows/reusable-provision.yml
 with:
@@ -404,9 +414,10 @@ with:
   ram_mb: 2048
   disk_gb: 8
   lxc_template: local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
+  lxc_unprivileged: true  # Default - secure
 ```
 
-### Provision Docker Host LXC
+### Provision Docker Host LXC (Unprivileged + Nesting)
 ```yaml
 uses: ./.github/workflows/reusable-provision.yml
 with:
@@ -416,8 +427,22 @@ with:
   cpu_cores: 4
   ram_mb: 4096
   disk_gb: 20
-  lxc_nesting: true
-  app_role: mgmt-docker
+  lxc_unprivileged: true  # Secure
+  lxc_nesting: true       # For Docker
+```
+
+### Provision Privileged LXC (Use with Caution)
+```yaml
+uses: ./.github/workflows/reusable-provision.yml
+with:
+  resource_type: lxc
+  app_name: legacy-app
+  vm_target_ip: 192.168.20.102
+  cpu_cores: 2
+  ram_mb: 2048
+  disk_gb: 10
+  lxc_template: local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
+  lxc_unprivileged: false  # ⚠️ PRIVILEGED MODE
 ```
 
 ## Next Steps
