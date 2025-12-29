@@ -29,6 +29,11 @@ resource "proxmox_lxc" "container" {
     tag    = var.vlan_tag
   }
   
+  # DNS configuration
+  # LXC containers don't inherit DNS from host, must be explicitly set
+  nameserver = "8.8.8.8"
+  searchdomain = "1.1.1.1"
+  
   # SSH public key for root user
   # Note: LXC containers only support adding SSH keys to root user
   # Ansible will run as root for LXC containers
