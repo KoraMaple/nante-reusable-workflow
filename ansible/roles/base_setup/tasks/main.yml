@@ -63,6 +63,14 @@
   retries: 1
   delay: 0
 
+- name: Update apt cache
+  shell: apt-get update
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: false
+  retries: 3
+  delay: 10
+
 - name: Install essential packages
   apt:
     name:
@@ -72,7 +80,6 @@
       - gpg
       - unzip
     state: present
-    update_cache: yes
     force_apt_get: yes
   environment:
     DEBIAN_FRONTEND: noninteractive
@@ -85,15 +92,6 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
   when: not is_lxc
-
-- name: Update apt cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
-    force_apt_get: yes
-  environment:
-    DEBIAN_FRONTEND: noninteractive
-  become: yes
 
 - name: Install QEMU Guest Agent (VMs only)
   apt:
