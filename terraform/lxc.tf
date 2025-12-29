@@ -29,7 +29,9 @@ resource "proxmox_lxc" "container" {
     tag    = var.vlan_tag
   }
   
-  # SSH public key for root user (LXC limitation - only root gets keys)
+  # SSH public key for root user
+  # Note: LXC containers only support adding SSH keys to root user
+  # Ansible will run as root for LXC containers
   ssh_public_keys = trimspace(var.ssh_public_key)
   
   # Container features

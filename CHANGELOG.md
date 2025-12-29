@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full Ansible compatibility (base_setup, octopus-tentacle, Tailscale)
   - Docker support via nesting feature (works with unprivileged)
   - Example workflows for standard, Docker-enabled, and privileged LXC
+  - **Simplified approach**: LXC runs Ansible as root (no deploy user needed)
 - **Comprehensive LXC documentation** - Complete guide with prerequisites, configuration, and best practices
 - **Tailscale ACL setup guide** - Complete guide for configuring ephemeral keys with automatic cleanup
 

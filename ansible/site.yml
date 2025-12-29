@@ -1,10 +1,4 @@
 ---
-- name: "LXC setup"
-  hosts: all
-  roles:
-    - role: lxc_setup
-      tags: lxc_setup
-
 - name: "Global Infrastructure Configuration"
   hosts: all
   become: true

@@ -320,17 +320,24 @@ jobs:
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # Test connectivity (use root for LXC, deploy for VM)
-          echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }}..."
+          # Clean up old SSH host keys to prevent conflicts
+          echo "Cleaning up old SSH host keys for ${{ inputs.vm_target_ip }}..."
+          ssh-keygen -R "${{ inputs.vm_target_ip }}" 2>/dev/null || true
+          
+          # Determine Ansible user based on resource type
+          # VMs use cloud-init to create 'deploy' user
+          # LXC containers only support SSH keys for root, so we run as root
           ANSIBLE_USER="deploy"
           if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            echo "LXC detected - connecting as root first to setup deploy user"
+            echo "LXC detected - will run Ansible as root"
             ANSIBLE_USER="root"
           fi
           
+          # Test connectivity
+          echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }} as $ANSIBLE_USER..."
           if ! ansible all -i "${{ inputs.vm_target_ip }}," -m ping \
             --user $ANSIBLE_USER \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10'; then
             echo "❌ ERROR: Ansible cannot connect to ${{ inputs.resource_type }}"
             exit 1
           fi
@@ -352,28 +359,12 @@ jobs:
             OCTOPUS_ROLES_JSON+="]"
           fi
           
-          # Run playbook with Octopus configuration
-          # Octopus Tentacle is now part of base_setup, so it runs automatically
-          # For LXC: First run as root to setup deploy user, then run as deploy
-          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            echo "Running initial LXC setup as root..."
-            ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
-              --user root \
-              --ssh-common-args='-o StrictHostKeyChecking=no' \
-              --extra-vars "target_hostname=${{ inputs.app_name }}" \
-              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-              --extra-vars "app_role_name=${{ inputs.app_name }}" \
-              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
-              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
-              --tags lxc_setup || true
-            
-            echo "Switching to deploy user for remaining configuration..."
-            sleep 2
-          fi
-          
+          # Run playbook with all integrations (Tailscale, LDAP, Octopus, Grafana)
+          # Note: LXC runs as root, VMs run as deploy user (created by cloud-init)
+          echo "Running Ansible playbook as $ANSIBLE_USER..."
           ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
-            --user deploy \
-            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --user $ANSIBLE_USER \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
             --extra-vars "target_hostname=${{ inputs.app_name }}" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}" \

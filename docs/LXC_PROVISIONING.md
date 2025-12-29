@@ -169,11 +169,16 @@ resource "proxmox_lxc" "container" {
 
 ### 1. No Cloud-Init
 LXC containers don't use cloud-init. Configuration happens via:
-- SSH keys injected directly
+- SSH keys injected directly to root user
 - Network configured in resource
 - Hostname set in resource
 
-### 2. Faster Provisioning
+### 2. Ansible User
+- **VMs**: Use `deploy` user (created by cloud-init)
+- **LXC**: Use `root` user (SSH keys only available for root)
+- All Ansible tasks run as root for LXC containers
+
+### 3. Faster Provisioning
 - No boot wait time
 - Container starts immediately
 - Ansible can connect within seconds
