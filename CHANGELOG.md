@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed jq dependency** - Workflows now use pure bash for JSON parsing (no external dependencies)
 - **Removed jmespath dependency** - Ansible Tailscale check now uses simple command exit code instead of JSON parsing
 - **Octopus Tentacle extraction** - Fixed tar.gz extraction to properly place binary with verification step
+- **Octopus Tentacle certificate** - Added certificate generation step before registration
+- **Octopus registration error visibility** - Removed no_log to show actual errors, added debug output
 
 ## [1.0.0] - 2024-12-27 - Phase 2 Complete
 

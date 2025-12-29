@@ -70,6 +70,14 @@
   args:
     creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
 
+- name: Generate Tentacle certificate
+  command: >
+    {{ tentacle_install_dir }}/Tentacle new-certificate
+    --instance "{{ tentacle_instance_name }}"
+    --if-blank
+  register: cert_result
+  changed_when: "'A new certificate has been generated' in cert_result.stdout"
+
 - name: Configure Tentacle
   command: >
     {{ tentacle_install_dir }}/Tentacle configure
@@ -78,8 +86,6 @@
     --app "{{ tentacle_app_dir }}"
     --port "{{ tentacle_port }}"
     --noListen "{{ 'True' if tentacle_communication_mode == 'Polling' else 'False' }}"
-  args:
-    creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
 
 - name: Debug Octopus registration variables
   debug:
@@ -103,6 +109,7 @@
     {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
     {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
   when: tentacle_communication_mode == "Polling"
+  no_log: true
   register: tentacle_register
   changed_when: "'already exists' not in tentacle_register.stdout and 'already exists' not in tentacle_register.stderr"
   failed_when: 
@@ -114,8 +121,8 @@
   debug:
     msg:
       - "Return code: {{ tentacle_register.rc }}"
-      - "Stdout: {{ tentacle_register.stdout }}"
-      - "Stderr: {{ tentacle_register.stderr }}"
+      - "Command failed during Octopus registration"
+      - "Check Octopus server connectivity and API key validity"
   when: 
     - tentacle_communication_mode == "Polling"
     - tentacle_register.rc != 0
@@ -134,6 +141,7 @@
     {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
     {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
   when: tentacle_communication_mode == "Listening"
+  no_log: true
   register: tentacle_register_listening
   changed_when: "'already exists' not in tentacle_register_listening.stdout and 'already exists' not in tentacle_register_listening.stderr"
   failed_when: 
@@ -145,8 +153,8 @@
   debug:
     msg:
       - "Return code: {{ tentacle_register_listening.rc }}"
-      - "Stdout: {{ tentacle_register_listening.stdout }}"
-      - "Stderr: {{ tentacle_register_listening.stderr }}"
+      - "Command failed during Octopus registration"
+      - "Check Octopus server connectivity and API key validity"
   when: 
     - tentacle_communication_mode == "Listening"
     - tentacle_register_listening.rc != 0
