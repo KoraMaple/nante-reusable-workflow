@@ -255,25 +255,33 @@ jobs:
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
-          echo "Waiting for VM at ${{ inputs.vm_target_ip }} to be reachable..."
+          echo "Waiting for ${{ inputs.resource_type }} at ${{ inputs.vm_target_ip }} to be reachable..."
           
-          # Wait up to 3 minutes for the VM to respond to ping
+          # Wait up to 3 minutes for the resource to respond to ping
           PING_SUCCESS=false
-          for i in {1..36}; do
+          MAX_ATTEMPTS=36
+          # LXC containers boot much faster, reduce wait time
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            MAX_ATTEMPTS=12  # 1 minute for LXC
+          fi
+          
+          for i in $(seq 1 $MAX_ATTEMPTS); do
             if ping -c 1 -W 2 ${{ inputs.vm_target_ip }} &>/dev/null; then
-              echo "✓ VM is responding to ping (attempt $i)"
+              echo "✓ ${{ inputs.resource_type }} is responding to ping (attempt $i)"
               PING_SUCCESS=true
               break
             fi
-            echo "Attempt $i/36: VM not yet reachable, waiting 5s..."
+            echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} not yet reachable, waiting 5s..."
             sleep 5
           done
           
           if [ "$PING_SUCCESS" = false ]; then
-            echo "❌ ERROR: VM did not respond to ping after 3 minutes"
+            echo "❌ ERROR: ${{ inputs.resource_type }} did not respond to ping"
             echo "Check that:"
-            echo "  1. VM was created successfully in Proxmox"
-            echo "  2. Cloud-init completed (check VM console)"
+            echo "  1. Resource was created successfully in Proxmox"
+            if [ "${{ inputs.resource_type }}" = "vm" ]; then
+              echo "  2. Cloud-init completed (check VM console)"
+            fi
             echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
             echo "  4. IP ${{ inputs.vm_target_ip }} is not already in use"
             exit 1
@@ -295,16 +303,22 @@ jobs:
           if [ "$SSH_SUCCESS" = false ]; then
             echo "❌ ERROR: SSH port did not open after 2 minutes"
             echo "Check that:"
-            echo "  1. Cloud-init completed successfully"
-            echo "  2. SSH service is running on the VM"
+            if [ "${{ inputs.resource_type }}" = "vm" ]; then
+              echo "  1. Cloud-init completed successfully"
+            fi
+            echo "  2. SSH service is running"
             echo "  3. Firewall is not blocking port 22"
             exit 1
           fi
           
-          # Additional wait for cloud-init to fully complete
-          echo "Waiting 15s for cloud-init to complete..."
-          sleep 15
-          echo "✓ VM is ready for Ansible configuration"
+          # Additional wait for cloud-init to fully complete (VMs only)
+          if [ "${{ inputs.resource_type }}" = "vm" ]; then
+            echo "Waiting 15s for cloud-init to complete..."
+            sleep 15
+            echo "✓ VM is ready for Ansible configuration"
+          else
+            echo "✓ LXC container is ready for Ansible configuration"
+          fi
 
       - name: Run Ansible with Doppler
         run: |

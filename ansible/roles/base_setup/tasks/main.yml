@@ -29,6 +29,28 @@
     regexp: '^127.0.1.1'
     line: "127.0.1.1 {{ target_hostname }}"
 
+- name: Configure apt for non-interactive mode
+  copy:
+    content: |
+      Dpkg::Options {
+         "--force-confdef";
+         "--force-confold";
+      }
+      APT::Get::Assume-Yes "true";
+      APT::Install-Recommends "false";
+    dest: /etc/apt/apt.conf.d/99-noninteractive
+    mode: '0644'
+
+- name: Wait for apt lock to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+          fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      echo "Waiting for apt lock..."
+      sleep 2
+    done
+  changed_when: false
+
 - name: Install essential packages
   apt:
     name:
@@ -39,23 +61,35 @@
       - unzip
     state: present
     update_cache: yes
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
 
 - name: Install rsyslog (non-LXC only)
   apt:
     name: rsyslog
     state: present
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
   when: not is_lxc
 
 - name: Update apt cache
   apt:
     update_cache: yes
     cache_valid_time: 3600
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
   become: yes
 
 - name: Install QEMU Guest Agent (VMs only)
   apt:
     name: qemu-guest-agent
     state: present
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
   when: virt_type.stdout in ['kvm', 'qemu']
 
 - name: Ensure QEMU Guest Agent is running (VMs only)
