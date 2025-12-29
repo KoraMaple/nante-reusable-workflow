@@ -335,6 +335,30 @@ jobs:
             echo "✓ LXC container is ready for Ansible configuration"
           fi
 
+      - name: Install Python dependencies for Ansible (RHEL-based LXC)
+        if: inputs.resource_type == 'lxc'
+        run: |
+          echo "Checking OS family and installing Python dependencies if needed..."
+          
+          # Detect OS family
+          OS_FAMILY=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            root@${{ inputs.vm_target_ip }} \
+            "cat /etc/os-release | grep '^ID_LIKE=' | cut -d'=' -f2 | tr -d '\"' || cat /etc/os-release | grep '^ID=' | cut -d'=' -f2 | tr -d '\"'")
+          
+          echo "Detected OS family: $OS_FAMILY"
+          
+          # Install Python dependencies only for RHEL-based systems (Fedora, CentOS, Rocky, etc.)
+          if echo "$OS_FAMILY" | grep -qE "rhel|fedora|centos"; then
+            echo "Installing Python dependencies for RHEL-based system..."
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              root@${{ inputs.vm_target_ip }} \
+              "dnf install -y python3 python3-pip python3-libdnf5 python3-libselinux python3-firewall python3-cryptography" || echo "Warning: Some packages may have failed to install"
+            echo "✓ Python dependencies installed"
+          else
+            echo "Debian-based system detected - skipping dnf package installation"
+            echo "✓ No additional Python dependencies needed for Debian-based systems"
+          fi
+
       - name: Run Ansible with Doppler
         run: |
           doppler run -- bash <<'EOF'
