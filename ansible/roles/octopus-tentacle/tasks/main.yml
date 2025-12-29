@@ -163,16 +163,21 @@
     {{ tentacle_install_dir }}/Tentacle service
     --instance "{{ tentacle_instance_name }}"
     --install
-  args:
-    creates: "/etc/systemd/system/tentacle.service"
-  notify: Reload systemd
+  register: service_install
+  changed_when: "'already installed' not in service_install.stdout"
+  failed_when: 
+    - service_install.rc != 0
+    - "'already installed' not in service_install.stdout"
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
 
 - name: Ensure Tentacle service is enabled and started
   systemd:
-    name: tentacle
+    name: "{{ tentacle_instance_name }}"
     enabled: yes
     state: started
-    daemon_reload: yes
 
 - name: Display Tentacle registration status
   debug:
