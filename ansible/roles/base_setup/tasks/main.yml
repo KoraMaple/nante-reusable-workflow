@@ -43,13 +43,25 @@
 
 - name: Wait for apt lock to be released
   shell: |
-    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
-          fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
-      echo "Waiting for apt lock..."
-      sleep 2
+    # Wait up to 5 minutes for apt locks to be released
+    TIMEOUT=300
+    ELAPSED=0
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+      if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 && \
+         ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1 && \
+         ! fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+        echo "All apt locks released"
+        exit 0
+      fi
+      echo "Waiting for apt lock... ($ELAPSED/$TIMEOUT seconds)"
+      sleep 5
+      ELAPSED=$((ELAPSED + 5))
     done
+    echo "Timeout waiting for apt lock after $TIMEOUT seconds"
+    exit 1
   changed_when: false
+  retries: 1
+  delay: 0
 
 - name: Install essential packages
   apt:
