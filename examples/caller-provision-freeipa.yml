@@ -27,8 +27,8 @@ jobs:
       disk_gb: '20'
       
       # LXC configuration
-      # Using Rocky Linux 10 for native FreeIPA packages (not available in Debian)
-      lxc_template: 'local:vztmpl/rockylinux-10-default_20251001_amd64.tar.xz'
+      # Using Fedora 42 for native FreeIPA packages (includes SSH by default)
+      lxc_template: 'local:vztmpl/fedora-42-default_20250428_amd64.tar.xz'
       lxc_unprivileged: true  # Must be true for Tailscale keyctl support
       lxc_nesting: false      # Not needed - native packages, no Docker required
       
