@@ -25,7 +25,6 @@ resource "tailscale_tailnet_key" "vm_auth_key" {
   # Only include tags if they're defined in your Tailscale ACL
   # Comment out or remove tags if you haven't configured them yet
   tags = [
-    "tag:terraform-managed",
     "tag:proxmox-vm",
     "tag:${var.environment}"
   ]
