@@ -27,9 +27,10 @@ jobs:
       disk_gb: '20'
       
       # LXC configuration
-      lxc_template: 'local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst'
+      # Using Rocky Linux 10 for native FreeIPA packages (not available in Debian)
+      lxc_template: 'local:vztmpl/rockylinux-10-default_20251001_amd64.tar.xz'
       lxc_unprivileged: true  # Must be true for Tailscale keyctl support
-      lxc_nesting: false
+      lxc_nesting: false      # Not needed - native packages, no Docker required
       
       # Infrastructure
       proxmox_node: 'pmx'

@@ -13,6 +13,10 @@
   set_fact:
     is_lxc: "{{ virt_type.stdout == 'lxc' }}"
 
+- name: Detect OS family
+  set_fact:
+    is_rhel: "{{ ansible_os_family == 'RedHat' }}"
+
 - name: Set FreeIPA facts
   set_fact:
     freeipa_domain: "kora.ldap.local"
@@ -48,22 +52,26 @@
     name: "{{ freeipa_hostname }}"
   when: not is_lxc
 
-- name: Set hostname to FQDN (LXC)
+- name: Set hostname to FQDN (LXC - Debian)
   shell: |
     echo "{{ freeipa_hostname }}" > /etc/hostname
     hostname "{{ freeipa_hostname }}"
-  when: is_lxc
+  when: is_lxc and not is_rhel
   changed_when: true
 
-- name: Install FreeIPA server packages
-  apt:
+- name: Set hostname to FQDN (LXC - RHEL)
+  command: hostnamectl set-hostname "{{ freeipa_hostname }}"
+  when: is_lxc and is_rhel
+  changed_when: true
+
+- name: Install FreeIPA server packages (RHEL/CentOS)
+  dnf:
     name:
       - freeipa-server
       - freeipa-server-dns
-      - python3-ipalib
-      - python3-ipaclient
     state: present
-    update_cache: yes
+  environment:
+    LANG: en_US.UTF-8
 
 - name: Check if FreeIPA is already configured
   stat:
