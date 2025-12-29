@@ -36,8 +36,8 @@ resource "proxmox_lxc" "container" {
   
   # Container features
   features {
-    nesting = var.lxc_nesting  # Required for Docker in LXC
-    keyctl  = true             # Required for Tailscale
+    nesting = var.lxc_nesting              # Required for Docker in LXC
+    keyctl  = var.lxc_unprivileged ? true : false  # Required for Tailscale (only works with unprivileged)
   }
   
   # Allow access to TUN device for Tailscale VPN

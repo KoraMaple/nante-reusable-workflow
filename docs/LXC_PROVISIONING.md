@@ -185,12 +185,17 @@ LXC containers don't use cloud-init. Configuration happens via:
 
 ### 4. Tailscale Support
 LXC containers require TUN device access for Tailscale:
-- **keyctl** feature enabled (for Tailscale authentication)
-- **TUN device** access configured automatically
+- **keyctl** feature enabled automatically for **unprivileged** containers
+- **Privileged containers**: keyctl requires root@pam permissions (not supported with API tokens)
 
-If Tailscale fails to start, manually enable TUN device:
+**For unprivileged containers** (recommended):
+- Tailscale works out of the box with `keyctl` enabled
+
+**For privileged containers**:
+- Manually enable TUN device after creation:
 ```bash
-# On Proxmox host
+# On Proxmox host (as root)
+pct set <CTID> --features keyctl=1
 pct set <CTID> --dev0 /dev/net/tun
 pct stop <CTID> && pct start <CTID>
 ```
@@ -213,6 +218,8 @@ lxc_unprivileged = false
 ```
 - ⚠️ Full root access to host
 - ⚠️ Less secure - container root = host root
+- ⚠️ **Tailscale limitation**: keyctl feature requires manual configuration (root@pam only)
+- ⚠️ Not recommended - use unprivileged containers instead
 - ⚠️ Only use when absolutely necessary
 - Use cases:
   - Legacy applications requiring full privileges
