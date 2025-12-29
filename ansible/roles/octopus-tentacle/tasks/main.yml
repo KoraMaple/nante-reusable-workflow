@@ -81,6 +81,15 @@
   args:
     creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
 
+- name: Debug Octopus registration variables
+  debug:
+    msg:
+      - "Target name: {{ target_name }}"
+      - "Environment: {{ octopus_environment }}"
+      - "Roles: {{ target_roles }}"
+      - "Space ID: {{ octopus_space_id }}"
+      - "Communication mode: {{ tentacle_communication_mode }}"
+
 - name: Register Tentacle with Octopus Server (Polling mode)
   command: >
     {{ tentacle_install_dir }}/Tentacle register-with
@@ -91,15 +100,25 @@
     --space "{{ octopus_space_id }}"
     --environment "{{ octopus_environment }}"
     --comms-style "TentacleActive"
-    {{ '--role "' + target_roles | join('" --role "') + '"' if target_roles | length > 0 else '' }}
-    {{ '--tenant "' + target_tenants | join('" --tenant "') + '"' if target_tenants | length > 0 else '' }}
+    {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
+    {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
   when: tentacle_communication_mode == "Polling"
-  no_log: true
   register: tentacle_register
-  changed_when: "'already exists' not in tentacle_register.stdout"
+  changed_when: "'already exists' not in tentacle_register.stdout and 'already exists' not in tentacle_register.stderr"
   failed_when: 
     - tentacle_register.rc != 0
     - "'already exists' not in tentacle_register.stdout"
+    - "'already exists' not in tentacle_register.stderr"
+
+- name: Display registration result (on failure)
+  debug:
+    msg:
+      - "Return code: {{ tentacle_register.rc }}"
+      - "Stdout: {{ tentacle_register.stdout }}"
+      - "Stderr: {{ tentacle_register.stderr }}"
+  when: 
+    - tentacle_communication_mode == "Polling"
+    - tentacle_register.rc != 0
 
 - name: Register Tentacle with Octopus Server (Listening mode)
   command: >
@@ -112,15 +131,25 @@
     --environment "{{ octopus_environment }}"
     --comms-style "TentaclePassive"
     --publicHostName "{{ ansible_default_ipv4.address }}"
-    {{ '--role "' + target_roles | join('" --role "') + '"' if target_roles | length > 0 else '' }}
-    {{ '--tenant "' + target_tenants | join('" --tenant "') + '"' if target_tenants | length > 0 else '' }}
+    {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
+    {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
   when: tentacle_communication_mode == "Listening"
-  no_log: true
   register: tentacle_register_listening
-  changed_when: "'already exists' not in tentacle_register_listening.stdout"
+  changed_when: "'already exists' not in tentacle_register_listening.stdout and 'already exists' not in tentacle_register_listening.stderr"
   failed_when: 
     - tentacle_register_listening.rc != 0
     - "'already exists' not in tentacle_register_listening.stdout"
+    - "'already exists' not in tentacle_register_listening.stderr"
+
+- name: Display registration result (on failure - Listening)
+  debug:
+    msg:
+      - "Return code: {{ tentacle_register_listening.rc }}"
+      - "Stdout: {{ tentacle_register_listening.stdout }}"
+      - "Stderr: {{ tentacle_register_listening.stderr }}"
+  when: 
+    - tentacle_communication_mode == "Listening"
+    - tentacle_register_listening.rc != 0
 
 - name: Install Tentacle systemd service
   command: >
