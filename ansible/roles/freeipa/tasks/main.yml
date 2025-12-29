@@ -26,6 +26,10 @@
   register: admin_password_result
   changed_when: false
 
+- name: Debug admin password result
+  debug:
+    msg: "Admin password stdout: '{{ admin_password_result.stdout }}' (length: {{ admin_password_result.stdout | length }})"
+
 - name: Generate FreeIPA DS password
   shell: |
     if [ ! -f /tmp/freeipa_ds_password ]; then
@@ -35,16 +39,20 @@
   register: ds_password_result
   changed_when: false
 
+- name: Debug DS password result
+  debug:
+    msg: "DS password stdout: '{{ ds_password_result.stdout }}' (length: {{ ds_password_result.stdout | length }})"
+
 - name: Set password facts
   set_fact:
-    freeipa_admin_password: "{{ admin_password_result.stdout }}"
-    freeipa_ds_password: "{{ ds_password_result.stdout }}"
+    freeipa_admin_password: "{{ admin_password_result.stdout | trim }}"
+    freeipa_ds_password: "{{ ds_password_result.stdout | trim }}"
 
 - name: Set FreeIPA facts
   set_fact:
     freeipa_domain: "kora.ldap.local"
     freeipa_realm: "KORA.LDAP.LOCAL"
-    freeipa_hostname: "{{ ansible_fqdn | default(ansible_hostname + '.' + freeipa_domain) }}"
+    freeipa_hostname: "{{ ansible_hostname }}.{{ freeipa_domain }}"
 
 - name: Display generated passwords
   debug:
