@@ -139,7 +139,7 @@ resource "proxmox_lxc" "container" {
   # Root filesystem
   rootfs {
     storage = var.proxmox_storage
-    size    = "${var.vm_disk_gb}G"
+    size    = "${var.vm_disk_gb}"
   }
   
   # Network
