@@ -378,7 +378,9 @@ jobs:
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}" \
             --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
-            --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON"
+            --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+            --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+            --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
           
           echo "✓ VM provisioned and configured"
           echo "✓ Octopus Tentacle installed and registered"

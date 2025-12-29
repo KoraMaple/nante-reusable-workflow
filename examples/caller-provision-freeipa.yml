@@ -1,0 +1,79 @@
+name: Provision FreeIPA Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'FreeIPA server IP address'
+        required: true
+        default: '192.168.20.10'
+
+jobs:
+  provision-freeipa:
+    uses: ./.github/workflows/reusable-provision.yml
+    with:
+      # Resource configuration
+      resource_type: lxc  # LXC recommended for FreeIPA
+      app_name: freeipa
+      environment: 'prod'
+      
+      # Network
+      vm_target_ip: ${{ inputs.server_ip }}
+      vlan_tag: '20'
+      
+      # Resources (FreeIPA needs decent resources)
+      cpu_cores: '4'
+      ram_mb: '4096'
+      disk_gb: '20'
+      
+      # LXC configuration
+      lxc_template: 'local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst'
+      lxc_unprivileged: true
+      lxc_nesting: false
+      
+      # Infrastructure
+      proxmox_node: 'pmx'
+      proxmox_storage: 'zfs-vm'
+      
+      # Skip Octopus for FreeIPA server
+      skip_octopus: true
+      
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+
+  configure-freeipa:
+    needs: provision-freeipa
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: KoraMaple/nante-reusable-workflow
+          
+      - name: Setup Doppler
+        uses: dopplerhq/cli-action@v3
+        
+      - name: Run FreeIPA Ansible role
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          echo "Installing FreeIPA server..."
+          ansible-playbook -i "${{ inputs.server_ip }}," site.yml \
+            --user deploy \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "app_role_name=freeipa" \
+            --extra-vars "target_hostname=freeipa"
+          
+          echo "✓ FreeIPA server installation complete!"
+          echo "Access Web UI at: https://${{ inputs.server_ip }}"
+          echo "Check workflow logs for admin password"
+          EOF

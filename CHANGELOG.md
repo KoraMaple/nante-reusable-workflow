@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **FreeIPA LDAP Server Role** - Centralized authentication and authorization
+  - Automatic installation and configuration of FreeIPA server
+  - Domain: kora.ldap.local with auto-generated admin credentials
+  - Pre-configured `owners` group for server administrators
+  - HBAC and sudo rules for access control
+  - Web UI for user management
+- **LDAP Client Configuration Role** - Configure servers to authenticate against FreeIPA
+  - Automatic enrollment with FreeIPA server
+  - SSSD configuration for user authentication
+  - Home directory auto-creation
+  - Sudo integration via FreeIPA
+  - **Integrated into base_setup** - All servers automatically enroll with FreeIPA when configured
+- **Doppler Secrets Documentation** - Complete guide for managing secrets in Doppler
 - **LXC Container Support** - Provision LXC containers alongside VMs using Terraform
   - New `resource_type` input (vm or lxc)
   - LXC-specific variables: template, nesting, unprivileged

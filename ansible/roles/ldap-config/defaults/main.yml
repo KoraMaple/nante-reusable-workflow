@@ -1,0 +1,5 @@
+---
+# LDAP Client default variables
+freeipa_server_hostname: "freeipa.kora.ldap.local"
+freeipa_domain: "kora.ldap.local"
+freeipa_realm: "KORA.LDAP.LOCAL"
