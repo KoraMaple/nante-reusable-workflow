@@ -66,9 +66,9 @@
   when: tailscale_status.rc != 0
   block:
     - name: Wait for Tailscale to be online
-      command: tailscale status --json
+      command: tailscale status
       register: tailscale_check
-      until: tailscale_check.stdout | from_json | json_query('Self.Online') == true
+      until: tailscale_check.rc == 0
       retries: 10
       delay: 3
       failed_when: false

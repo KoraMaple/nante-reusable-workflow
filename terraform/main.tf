@@ -16,7 +16,7 @@ locals {
 }
 
 resource "proxmox_vm_qemu" "generic_vm" {
-  name        = "${var.app_name}-vm"
+  name        = "${local.vm_hostname}"
   target_node = var.proxmox_target_node
   clone       = var.vm_template
   full_clone  = true
@@ -71,7 +71,7 @@ resource "proxmox_vm_qemu" "generic_vm" {
   # Tailscale installation via cloud-init snippets
   # Note: This uses Proxmox's cicustom feature which requires snippets to be pre-uploaded
   # The workflow will handle creating and uploading the snippet
-  cicustom = var.enable_tailscale_terraform ? "user=local:snippets/${var.app_name}-tailscale.yml" : ""
+  cicustom = var.enable_tailscale_terraform ? "user=local:snippets/${local.vm_hostname}-tailscale.yml" : ""
   
   # Ensure correct boot order
   boot = "order=scsi0;ide2;net0"
