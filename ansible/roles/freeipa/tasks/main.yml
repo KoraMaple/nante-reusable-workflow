@@ -3,6 +3,16 @@
 # Domain: kora.ldap.local
 # This role installs and configures FreeIPA server for centralized authentication
 
+- name: Check virtualization type
+  shell: systemd-detect-virt
+  register: virt_type
+  changed_when: false
+  failed_when: false
+
+- name: Set LXC fact
+  set_fact:
+    is_lxc: "{{ virt_type.stdout == 'lxc' }}"
+
 - name: Set FreeIPA facts
   set_fact:
     freeipa_domain: "kora.ldap.local"
@@ -33,9 +43,17 @@
     line: "{{ ansible_default_ipv4.address }} {{ freeipa_hostname }} {{ ansible_hostname }}"
     state: present
 
-- name: Set hostname to FQDN
+- name: Set hostname to FQDN (non-LXC)
   hostname:
     name: "{{ freeipa_hostname }}"
+  when: not is_lxc
+
+- name: Set hostname to FQDN (LXC)
+  shell: |
+    echo "{{ freeipa_hostname }}" > /etc/hostname
+    hostname "{{ freeipa_hostname }}"
+  when: is_lxc
+  changed_when: true
 
 - name: Install FreeIPA server packages
   apt:
