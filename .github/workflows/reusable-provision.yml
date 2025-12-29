@@ -251,6 +251,19 @@ jobs:
           else
             echo "⚠️  No Tailscale auth key found - Ansible will use fallback TS_AUTHKEY"
           fi
+          
+          # Install SSH in LXC container if needed (Rocky Linux doesn't include it by default)
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            echo "Installing SSH in LXC container..."
+            CTID=$(terraform output -raw lxc_id 2>/dev/null)
+            if [ -n "$CTID" ]; then
+              echo "Container ID: $CTID"
+              ssh ${{ secrets.PROXMOX_HOST }} "pct exec $CTID -- dnf install -y openssh-server && pct exec $CTID -- systemctl enable sshd && pct exec $CTID -- systemctl start sshd" || true
+              echo "✓ SSH installation attempted"
+            else
+              echo "⚠️  Could not determine container ID"
+            fi
+          fi
           EOF
 
       - name: Wait for VM to boot and SSH to be ready
