@@ -1,4 +1,4 @@
-name: "Reusable VM Provisioning"
+name: "Reusable VM/CT Provisioning"
 
 on:
   workflow_call:
@@ -47,6 +47,22 @@ on:
         description: 'VM template to clone'
         required: false
         default: 'ubuntu-2404-template'
+      # Resource type selection
+      resource_type:
+        type: string
+        description: 'Resource type: vm or lxc'
+        required: false
+        default: 'vm'
+      lxc_template:
+        type: string
+        description: 'LXC template (only for resource_type=lxc)'
+        required: false
+        default: 'local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst'
+      lxc_nesting:
+        type: boolean
+        description: 'Enable nesting for Docker in LXC'
+        required: false
+        default: false
       # Skip Terraform for existing VMs
       skip_terraform:
         type: boolean
@@ -193,6 +209,7 @@ jobs:
           # Terraform Plan
           terraform plan \
             -var="app_name=${{ inputs.app_name }}" \
+            -var="environment=${{ inputs.environment }}" \
             -var="vlan_tag=${{ inputs.vlan_tag }}" \
             -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
             -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
@@ -201,6 +218,9 @@ jobs:
             -var="proxmox_target_node=${{ inputs.proxmox_node }}" \
             -var="proxmox_storage=${{ inputs.proxmox_storage }}" \
             -var="vm_template=${{ inputs.vm_template }}" \
+            -var="resource_type=${{ inputs.resource_type }}" \
+            -var="lxc_template=${{ inputs.lxc_template }}" \
+            -var="lxc_nesting=${{ inputs.lxc_nesting }}" \
             -var="enable_tailscale_terraform=false" \
             -out=tfplan
           

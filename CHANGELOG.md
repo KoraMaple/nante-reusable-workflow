@@ -7,17 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **LXC Container Support** - Provision LXC containers alongside VMs using Terraform
+  - New `resource_type` input (vm or lxc)
+  - LXC-specific variables: template, nesting, unprivileged
+  - Faster boot times (2-5 seconds vs 30-60 seconds)
+  - Lower resource usage (shared kernel)
+  - Full Ansible compatibility (base_setup, octopus-tentacle, Tailscale)
+  - Docker support via nesting feature
+  - Example workflows for standard and Docker-enabled LXC
+- **Comprehensive LXC documentation** - Complete guide with prerequisites, configuration, and best practices
+- **Tailscale ACL setup guide** - Complete guide for configuring ephemeral keys with automatic cleanup
+
 ### Changed
 - **Octopus Tentacle now part of base_setup** - Every VM automatically gets Octopus Tentacle installed and registered as part of standard provisioning (no separate step needed)
 - Removed separate Octopus registration steps from workflows
 - Simplified workflow usage - just pass `octopus_environment` and `octopus_roles` as inputs
-
-### Changed
 - **Tailscale auth keys support ephemeral mode** - Optional automatic cleanup when VM destroyed (requires ACL configuration)
 - Default to non-ephemeral keys for simpler initial setup (no ACL changes required)
-
-### Added
-- **Tailscale ACL setup guide** - Complete guide for configuring ephemeral keys with automatic cleanup
+- **VM resource now conditional** - Only creates when resource_type=vm (allows LXC provisioning)
 
 ### Fixed
 - **Workflow retry handling** - Workflows now detect existing VMs and skip Terraform apply on retry

@@ -88,3 +88,32 @@ variable "enable_tailscale_terraform" {
   default     = true
   description = "Enable Tailscale installation via Terraform (cloud-init). If false, Ansible will handle Tailscale."
 }
+
+# LXC Container Variables
+variable "resource_type" {
+  type        = string
+  default     = "vm"
+  description = "Type of resource to create: 'vm' or 'lxc'"
+  validation {
+    condition     = contains(["vm", "lxc"], var.resource_type)
+    error_message = "resource_type must be either 'vm' or 'lxc'"
+  }
+}
+
+variable "lxc_template" {
+  type        = string
+  default     = "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+  description = "LXC template to use (only applies when resource_type=lxc)"
+}
+
+variable "lxc_unprivileged" {
+  type        = bool
+  default     = true
+  description = "Run LXC container as unprivileged (recommended for security)"
+}
+
+variable "lxc_nesting" {
+  type        = bool
+  default     = false
+  description = "Enable nesting in LXC (required for running Docker inside container)"
+}

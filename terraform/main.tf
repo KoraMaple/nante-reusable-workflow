@@ -16,7 +16,9 @@ locals {
 }
 
 resource "proxmox_vm_qemu" "generic_vm" {
-  name        = "${local.vm_hostname}"
+  count = var.resource_type == "vm" ? 1 : 0
+  
+  name        = local.vm_hostname
   target_node = var.proxmox_target_node
   clone       = var.vm_template
   full_clone  = true
