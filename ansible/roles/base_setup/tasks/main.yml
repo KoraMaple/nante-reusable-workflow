@@ -259,6 +259,7 @@
     octopus_environment: "{{ octopus_environment | default('Development') }}"
     target_roles: "{{ octopus_roles | default([]) }}"
   when: 
+    - not (skip_octopus | default(false) | bool)
     - octopus_server_url is defined
     - octopus_server_url | length > 0
     - octopus_api_key is defined

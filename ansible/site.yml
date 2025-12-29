@@ -1,7 +1,9 @@
 ---
 - name: "Global Infrastructure Configuration"
   hosts: all
-  become: true
+  # become is controlled by workflow (--become flag)
+  # VMs: become=true (deploy user needs sudo)
+  # LXC: become=false (already running as root)
   vars:
     # We pull the authkey from the environment variable set in GitHub Action
     ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
