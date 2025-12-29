@@ -29,7 +29,7 @@ resource "proxmox_lxc" "container" {
     tag    = var.vlan_tag
   }
   
-  # SSH public key for deploy user
+  # SSH public key for root user (LXC limitation - only root gets keys)
   ssh_public_keys = trimspace(var.ssh_public_key)
   
   # Container features

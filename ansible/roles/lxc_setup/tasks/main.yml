@@ -1,0 +1,44 @@
+---
+# LXC-specific setup tasks
+# This role creates the deploy user in LXC containers since the Proxmox provider
+# only adds SSH keys to root user
+
+- name: LXC-specific setup
+  tags: lxc_setup
+  block:
+    - name: Ensure deploy user exists
+      user:
+        name: deploy
+        shell: /bin/bash
+        create_home: yes
+        groups: sudo
+        append: yes
+        state: present
+
+    - name: Configure sudo for deploy user
+      copy:
+        content: "deploy ALL=(ALL) NOPASSWD:ALL\n"
+        dest: /etc/sudoers.d/deploy
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Ensure .ssh directory exists for deploy user
+      file:
+        path: /home/deploy/.ssh
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0700'
+
+    - name: Copy SSH authorized_keys from root to deploy
+      copy:
+        src: /root/.ssh/authorized_keys
+        dest: /home/deploy/.ssh/authorized_keys
+        owner: deploy
+        group: deploy
+        mode: '0600'
+        remote_src: yes
+
+    - name: Display LXC setup completion
+      debug:
+        msg: "LXC container setup complete - deploy user configured"

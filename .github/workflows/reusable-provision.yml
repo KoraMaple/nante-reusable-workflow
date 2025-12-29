@@ -320,12 +320,18 @@ jobs:
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # Test connectivity
+          # Test connectivity (use root for LXC, deploy for VM)
           echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }}..."
+          ANSIBLE_USER="deploy"
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            echo "LXC detected - connecting as root first to setup deploy user"
+            ANSIBLE_USER="root"
+          fi
+          
           if ! ansible all -i "${{ inputs.vm_target_ip }}," -m ping \
-            --user deploy \
+            --user $ANSIBLE_USER \
             --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
-            echo "❌ ERROR: Ansible cannot connect to VM"
+            echo "❌ ERROR: Ansible cannot connect to ${{ inputs.resource_type }}"
             exit 1
           fi
           echo "✓ Ansible connectivity confirmed"
@@ -348,6 +354,23 @@ jobs:
           
           # Run playbook with Octopus configuration
           # Octopus Tentacle is now part of base_setup, so it runs automatically
+          # For LXC: First run as root to setup deploy user, then run as deploy
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            echo "Running initial LXC setup as root..."
+            ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
+              --user root \
+              --ssh-common-args='-o StrictHostKeyChecking=no' \
+              --extra-vars "target_hostname=${{ inputs.app_name }}" \
+              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+              --extra-vars "app_role_name=${{ inputs.app_name }}" \
+              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+              --tags lxc_setup || true
+            
+            echo "Switching to deploy user for remaining configuration..."
+            sleep 2
+          fi
+          
           ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
             --user deploy \
             --ssh-common-args='-o StrictHostKeyChecking=no' \
