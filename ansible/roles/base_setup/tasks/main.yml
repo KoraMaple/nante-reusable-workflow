@@ -10,6 +10,11 @@
   set_fact:
     is_lxc: "{{ virt_type.stdout == 'lxc' }}"
 
+- name: Set OS family facts
+  set_fact:
+    is_debian: "{{ ansible_os_family == 'Debian' }}"
+    is_redhat: "{{ ansible_os_family == 'RedHat' }}"
+
 # Hostname configuration
 - name: Set system hostname (non-LXC)
   hostname:
@@ -29,6 +34,7 @@
     regexp: '^127.0.1.1'
     line: "127.0.1.1 {{ target_hostname }}"
 
+# Debian/Ubuntu package management
 - name: Configure apt for non-interactive mode
   copy:
     content: |
@@ -40,6 +46,7 @@
       APT::Install-Recommends "false";
     dest: /etc/apt/apt.conf.d/99-noninteractive
     mode: '0644'
+  when: is_debian
 
 - name: Wait for apt lock to be released
   shell: |
@@ -62,6 +69,7 @@
   changed_when: false
   retries: 1
   delay: 0
+  when: is_debian
 
 - name: Update apt cache
   shell: apt-get update
@@ -70,8 +78,9 @@
   changed_when: false
   retries: 3
   delay: 10
+  when: is_debian
 
-- name: Install essential packages
+- name: Install essential packages (Debian/Ubuntu)
   apt:
     name:
       - curl
@@ -83,24 +92,48 @@
     force_apt_get: yes
   environment:
     DEBIAN_FRONTEND: noninteractive
+  when: is_debian
 
-- name: Install rsyslog (non-LXC only)
+# RHEL/Fedora package management
+- name: Install essential packages (RHEL/Fedora)
+  dnf:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg2
+      - unzip
+    state: present
+  when: is_redhat
+
+- name: Install rsyslog (non-LXC only - Debian)
   apt:
     name: rsyslog
     state: present
     force_apt_get: yes
   environment:
     DEBIAN_FRONTEND: noninteractive
-  when: not is_lxc
+  when: not is_lxc and is_debian
 
-- name: Install QEMU Guest Agent (VMs only)
+- name: Install rsyslog (non-LXC only - RHEL)
+  dnf:
+    name: rsyslog
+    state: present
+  when: not is_lxc and is_redhat
+
+- name: Install QEMU Guest Agent (VMs only - Debian)
   apt:
     name: qemu-guest-agent
     state: present
     force_apt_get: yes
   environment:
     DEBIAN_FRONTEND: noninteractive
-  when: virt_type.stdout in ['kvm', 'qemu']
+  when: virt_type.stdout in ['kvm', 'qemu'] and is_debian
+
+- name: Install QEMU Guest Agent (VMs only - RHEL)
+  dnf:
+    name: qemu-guest-agent
+    state: present
+  when: virt_type.stdout in ['kvm', 'qemu'] and is_redhat
 
 - name: Ensure QEMU Guest Agent is running (VMs only)
   service:
