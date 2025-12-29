@@ -72,6 +72,25 @@
     state: present
   environment:
     LANG: en_US.UTF-8
+  when: is_rhel
+  register: freeipa_install_result
+  failed_when: false
+
+- name: Display FreeIPA package installation result
+  debug:
+    msg: "{{ freeipa_install_result }}"
+  when: is_rhel
+
+- name: Fail if FreeIPA packages not available
+  fail:
+    msg: |
+      FreeIPA packages are not available on this system.
+      Please ensure you are using a supported RHEL-based distribution (Fedora, CentOS Stream, Rocky Linux, etc.)
+      and that the appropriate repositories are enabled.
+      
+      For Fedora: dnf install freeipa-server freeipa-server-dns
+      For CentOS Stream/Rocky: dnf install epel-release && dnf install freeipa-server freeipa-server-dns
+  when: is_rhel and freeipa_install_result.failed
 
 - name: Check if FreeIPA is already configured
   stat:
