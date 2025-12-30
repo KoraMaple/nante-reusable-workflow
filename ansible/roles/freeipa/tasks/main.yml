@@ -51,15 +51,15 @@
   set_fact:
     freeipa_domain: "kora.ldap.local"
     freeipa_realm: "KORA.LDAP.LOCAL"
-    freeipa_admin_password: "{{ admin_password_result.stdout }}"
-    freeipa_ds_password: "{{ ds_password_result.stdout }}"
+    ipa_admin_password: "{{ admin_password_result.stdout }}"
+    ipa_ds_password: "{{ ds_password_result.stdout }}"
     freeipa_hostname: "{{ ansible_hostname }}.kora.ldap.local"
 
 - name: Debug facts immediately after set_fact
   debug:
     msg:
-      - "Admin password after set_fact: '{{ freeipa_admin_password }}'"
-      - "DS password after set_fact: '{{ freeipa_ds_password }}'"
+      - "Admin password after set_fact: '{{ ipa_admin_password }}'"
+      - "DS password after set_fact: '{{ ipa_ds_password }}'"
       - "Hostname after set_fact: '{{ freeipa_hostname }}'"
 
 - name: Display generated passwords
@@ -71,8 +71,8 @@
       - "Domain: {{ freeipa_domain }}"
       - "Realm: {{ freeipa_realm }}"
       - "Admin User: admin"
-      - "Admin Password: {{ freeipa_admin_password }}"
-      - "Directory Manager Password: {{ freeipa_ds_password }}"
+      - "Admin Password: {{ ipa_admin_password }}"
+      - "Directory Manager Password: {{ ipa_ds_password }}"
       - "Web UI: https://{{ freeipa_hostname }}"
       - "==================================================================="
       - "IMPORTANT: Save these credentials securely!"
@@ -139,8 +139,8 @@
     ipa-server-install
     --domain={{ freeipa_domain }}
     --realm={{ freeipa_realm }}
-    --ds-password={{ freeipa_ds_password }}
-    --admin-password={{ freeipa_admin_password }}
+    --ds-password={{ ipa_ds_password }}
+    --admin-password={{ ipa_admin_password }}
     --hostname={{ freeipa_hostname }}
     --no-ntp
     --unattended
@@ -177,7 +177,7 @@
   ignore_errors: yes
 
 - name: Authenticate with FreeIPA
-  shell: echo "{{ freeipa_admin_password }}" | kinit admin
+  shell: echo "{{ ipa_admin_password }}" | kinit admin
   changed_when: false
   no_log: true
 
@@ -274,7 +274,7 @@
       - "==================================================================="
       - "Web UI: https://{{ freeipa_hostname }}"
       - "Username: admin"
-      - "Password: {{ freeipa_admin_password }}"
+      - "Password: {{ ipa_admin_password }}"
       - ""
       - "Next Steps:"
       - "1. Access the Web UI and add users to the 'owners' group"
