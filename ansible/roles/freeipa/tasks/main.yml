@@ -43,16 +43,13 @@
   debug:
     msg: "DS password stdout: '{{ ds_password_result.stdout }}' (length: {{ ds_password_result.stdout | length }})"
 
-- name: Set password facts
-  set_fact:
-    freeipa_admin_password: "{{ admin_password_result.stdout | trim }}"
-    freeipa_ds_password: "{{ ds_password_result.stdout | trim }}"
-
-- name: Set FreeIPA facts
+- name: Set all FreeIPA facts
   set_fact:
     freeipa_domain: "kora.ldap.local"
     freeipa_realm: "KORA.LDAP.LOCAL"
-    freeipa_hostname: "{{ ansible_hostname }}.{{ freeipa_domain }}"
+    freeipa_admin_password: "{{ admin_password_result.stdout | trim }}"
+    freeipa_ds_password: "{{ ds_password_result.stdout | trim }}"
+    freeipa_hostname: "{{ ansible_hostname }}.kora.ldap.local"
 
 - name: Display generated passwords
   debug:
