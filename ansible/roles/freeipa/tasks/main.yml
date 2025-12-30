@@ -62,7 +62,7 @@
 - name: Update /etc/hosts with FreeIPA hostname
   lineinfile:
     path: /etc/hosts
-    line: "{{ ansible_default_ipv4.address }} {{ freeipa_hostname }} {{ ansible_hostname }}"
+    line: "{{ ansible_default_ipv4.address }} {{ freeipa_hostname }} {{ target_hostname }}"
     state: present
 
 - name: Set hostname to FQDN (non-LXC)
