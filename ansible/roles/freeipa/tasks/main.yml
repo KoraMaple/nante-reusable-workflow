@@ -51,6 +51,13 @@
     freeipa_ds_password: "{{ ds_password_result.stdout | trim }}"
     freeipa_hostname: "{{ ansible_hostname }}.kora.ldap.local"
 
+- name: Debug facts immediately after set_fact
+  debug:
+    msg:
+      - "Admin password after set_fact: '{{ freeipa_admin_password }}'"
+      - "DS password after set_fact: '{{ freeipa_ds_password }}'"
+      - "Hostname after set_fact: '{{ freeipa_hostname }}'"
+
 - name: Display generated passwords
   debug:
     msg:
