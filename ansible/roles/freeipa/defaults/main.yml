@@ -1,4 +1,4 @@
 ---
 # FreeIPA Server default variables
-freeipa_domain: "kora.ldap.local"
-freeipa_realm: "KORA.LDAP.LOCAL"
+freeipa_domain: "pmx.koramaple.com"
+freeipa_realm: "PMX.KORAMAPLE.COM"
