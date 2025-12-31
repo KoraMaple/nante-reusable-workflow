@@ -251,6 +251,15 @@ jobs:
           else
             echo "⚠️  No Tailscale auth key found - Ansible will use fallback TS_AUTHKEY"
           fi
+          
+          # Get VM hostname from Terraform for Ansible
+          export VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+          if [ -n "$VM_HOSTNAME" ]; then
+            echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
+            echo "✓ VM hostname: $VM_HOSTNAME"
+          else
+            echo "⚠️  No VM hostname found in Terraform output"
+          fi
           EOF
 
       - name: Wait for VM to boot and SSH to be ready
@@ -400,7 +409,7 @@ jobs:
             --user $ANSIBLE_USER \
             $BECOME_FLAG \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-            --extra-vars "target_hostname=${{ inputs.app_name }}" \
+            --extra-vars "target_hostname=${VM_HOSTNAME}" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}" \
             --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
