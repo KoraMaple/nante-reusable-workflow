@@ -47,7 +47,14 @@ resource "proxmox_lxc" "container" {
   
   # Start on boot
   onboot = true
-  start  = true
+  start  = false  # Don't auto-start - we need to configure TUN first
+  
+  # NOTE: TUN device must be manually configured for Tailscale to work
+  # After Terraform creates the container, run these commands on the Proxmox host:
+  #   pct stop <VMID>
+  #   echo 'lxc.cgroup2.devices.allow: c 10:200 rwm' >> /etc/pve/lxc/<VMID>.conf
+  #   echo 'lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' >> /etc/pve/lxc/<VMID>.conf
+  #   pct start <VMID>
   
   # Lifecycle management
   lifecycle {
