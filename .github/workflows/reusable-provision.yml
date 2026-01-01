@@ -249,30 +249,45 @@ jobs:
             echo "Configuring TUN device for LXC container..."
             LXC_ID=$(terraform output -raw lxc_id 2>/dev/null)
             if [ -n "$LXC_ID" ]; then
-              # Add TUN device configuration to LXC config on Proxmox node
-              # This runs directly on the self-hosted runner which has access to Proxmox
               PROXMOX_NODE="${{ inputs.proxmox_node }}"
+              echo "LXC ID: ${LXC_ID}, Proxmox Node: ${PROXMOX_NODE}"
               
-              # Check if TUN config already exists
-              if ! ssh root@${PROXMOX_NODE} "grep -q 'lxc.cgroup2.devices.allow: c 10:200 rwm' /etc/pve/lxc/${LXC_ID}.conf"; then
-                echo "Adding TUN device configuration..."
-                ssh root@${PROXMOX_NODE} "cat >> /etc/pve/lxc/${LXC_ID}.conf" <<TUNCONF
+              # Use pct to configure TUN device - this is the proper way
+              echo "Adding TUN device configuration via pct..."
+              ssh root@${PROXMOX_NODE} bash -s ${LXC_ID} <<'EOSSH'
+                LXC_ID="$1"
+                
+                # Stop the container first
+                echo "Stopping LXC ${LXC_ID}..."
+                pct stop ${LXC_ID} || true
+                sleep 2
+                
+                # Check if TUN config already exists
+                if ! grep -q 'lxc.cgroup2.devices.allow: c 10:200 rwm' /etc/pve/lxc/${LXC_ID}.conf; then
+                  echo "Adding TUN device configuration to /etc/pve/lxc/${LXC_ID}.conf..."
+                  cat >> /etc/pve/lxc/${LXC_ID}.conf <<'TUNCONF'
 # allow TUN device
 lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 TUNCONF
-                echo "✓ TUN device configured for LXC ${LXC_ID}"
+                  echo "✓ TUN device configured"
+                else
+                  echo "✓ TUN device already configured"
+                fi
                 
-                # Restart container to apply changes
-                echo "Restarting LXC container to apply TUN device configuration..."
-                ssh root@${PROXMOX_NODE} "pct stop ${LXC_ID} && sleep 2 && pct start ${LXC_ID}"
-                echo "✓ LXC container restarted"
+                # Start the container
+                echo "Starting LXC ${LXC_ID}..."
+                pct start ${LXC_ID}
                 
-                # Wait for container to be fully up
-                sleep 10
-              else
-                echo "✓ TUN device already configured for LXC ${LXC_ID}"
-              fi
+                # Verify TUN device exists inside container
+                sleep 5
+                echo "Verifying TUN device..."
+                pct exec ${LXC_ID} -- ls -la /dev/net/tun || echo "⚠️  TUN device not found"
+EOSSH
+              
+              echo "✓ LXC container configured and restarted"
+              # Wait for container to be fully up
+              sleep 10
             else
               echo "⚠️  Could not get LXC ID from Terraform output"
             fi
