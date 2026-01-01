@@ -15,7 +15,7 @@
     state: present
   when: freeipa_server_ip is defined
 
-- name: Install FreeIPA client packages
+- name: Install FreeIPA client packages (Debian/Ubuntu)
   apt:
     name:
       - freeipa-client
@@ -26,6 +26,17 @@
       - oddjob-mkhomedir
     state: present
     update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install FreeIPA client packages (RHEL/CentOS)
+  dnf:
+    name:
+      - ipa-client
+      - sssd
+      - sssd-tools
+      - oddjob-mkhomedir
+    state: present
+  when: ansible_os_family == "RedHat"
 
 - name: Check if already enrolled in FreeIPA
   stat:
@@ -60,11 +71,19 @@
     state: started
     enabled: yes
 
-- name: Configure PAM to create home directories
+- name: Configure PAM to create home directories (Debian/Ubuntu)
   lineinfile:
     path: /etc/pam.d/common-session
     line: "session required pam_mkhomedir.so skel=/etc/skel umask=0077"
     state: present
+  when: ansible_os_family == "Debian"
+
+- name: Configure PAM to create home directories (RHEL/CentOS)
+  lineinfile:
+    path: /etc/pam.d/system-auth
+    line: "session required pam_oddjob_mkhomedir.so skel=/etc/skel umask=0077"
+    state: present
+  when: ansible_os_family == "RedHat"
 
 - name: Configure sudoers for SSSD
   lineinfile:

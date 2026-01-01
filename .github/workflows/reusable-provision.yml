@@ -451,6 +451,14 @@ jobs:
             echo "✓ Using Terraform-generated Tailscale auth key"
           fi
           
+          # FreeIPA LDAP configuration (from Doppler)
+          # These are used by ldap-config role to enroll VMs/CTs with FreeIPA
+          if [ -n "$FREEIPA_SERVER_IP" ] && [ -n "$FREEIPA_ADMIN_PASSWORD" ]; then
+            echo "✓ FreeIPA LDAP configuration available - will configure LDAP client"
+          else
+            echo "⚠️  FreeIPA credentials not found in Doppler - LDAP client will not be configured"
+          fi
+          
           ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
             --user $ANSIBLE_USER \
             $BECOME_FLAG \
