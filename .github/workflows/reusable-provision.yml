@@ -451,6 +451,14 @@ jobs:
             echo "✓ Using Terraform-generated Tailscale auth key"
           fi
           
+          # Get VM hostname from environment (set in previous step)
+          VM_HOSTNAME="${{ env.VM_HOSTNAME }}"
+          if [ -z "$VM_HOSTNAME" ]; then
+            echo "⚠️  WARNING: VM_HOSTNAME not found in environment"
+          else
+            echo "✓ Using VM hostname: $VM_HOSTNAME"
+          fi
+          
           # FreeIPA LDAP configuration (from Doppler)
           # These are used by ldap-config role to enroll VMs/CTs with FreeIPA
           if [ -n "$FREEIPA_SERVER_IP" ] && [ -n "$FREEIPA_ADMIN_PASSWORD" ]; then
@@ -463,7 +471,7 @@ jobs:
             --user $ANSIBLE_USER \
             $BECOME_FLAG \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-            --extra-vars "target_hostname=${VM_HOSTNAME}" \
+            --extra-vars "target_hostname=$VM_HOSTNAME" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
             --extra-vars "app_role_name=${{ inputs.app_name }}" \
             --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
