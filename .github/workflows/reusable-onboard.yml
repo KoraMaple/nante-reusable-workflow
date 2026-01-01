@@ -67,6 +67,67 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
+      - name: Generate Tailscale Auth Key
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Create temporary Terraform config for auth key generation
+          mkdir -p /tmp/tailscale-onboard
+          cd /tmp/tailscale-onboard
+          
+          cat > main.tf <<'TFEOF'
+          terraform {
+            required_providers {
+              tailscale = {
+                source  = "tailscale/tailscale"
+                version = "~> 0.17"
+              }
+            }
+          }
+          
+          provider "tailscale" {
+            # Uses environment variables from Doppler:
+            # TAILSCALE_OAUTH_CLIENT_ID
+            # TAILSCALE_OAUTH_CLIENT_SECRET
+            # TAILSCALE_TAILNET
+          }
+          
+          resource "tailscale_tailnet_key" "onboard_key" {
+            reusable      = true
+            ephemeral     = false
+            preauthorized = true
+            expiry        = 7776000  # 90 days
+            description   = "Onboarding key for ${{ inputs.target_hostname }}"
+          }
+          
+          output "auth_key" {
+            value     = tailscale_tailnet_key.onboard_key.key
+            sensitive = true
+          }
+          TFEOF
+          
+          # Initialize and apply
+          echo "Generating Tailscale auth key via Terraform..."
+          terraform init -no-color
+          terraform apply -auto-approve -no-color
+          
+          # Export auth key for Ansible
+          export TS_AUTHKEY=$(terraform output -raw auth_key)
+          if [ -n "$TS_AUTHKEY" ]; then
+            echo "TS_AUTHKEY=$TS_AUTHKEY" >> $GITHUB_ENV
+            echo "✓ Tailscale auth key generated"
+          else
+            echo "⚠️  Failed to generate Tailscale auth key"
+          fi
+          
+          # Cleanup
+          cd /
+          rm -rf /tmp/tailscale-onboard
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
       - name: Run Ansible with Doppler
         run: |
           doppler run -- bash <<'EOF'
@@ -105,6 +166,15 @@ jobs:
               fi
             done
             OCTOPUS_ROLES_JSON+="]"
+          fi
+          
+          # Export Tailscale auth key for Ansible
+          export TS_AUTHKEY="$TS_AUTHKEY"
+          
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "⚠️  WARNING: No Tailscale auth key available. Tailscale will not be configured."
+          else
+            echo "✓ Using Tailscale auth key for onboarding"
           fi
           
           # Run playbook with Octopus configuration
