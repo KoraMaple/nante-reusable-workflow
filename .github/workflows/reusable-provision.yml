@@ -244,6 +244,40 @@ jobs:
             exit 1
           fi
           
+          # Configure TUN device for LXC containers (required for Tailscale)
+          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+            echo "Configuring TUN device for LXC container..."
+            LXC_ID=$(terraform output -raw lxc_id 2>/dev/null)
+            if [ -n "$LXC_ID" ]; then
+              # Add TUN device configuration to LXC config on Proxmox node
+              # This runs directly on the self-hosted runner which has access to Proxmox
+              PROXMOX_NODE="${{ inputs.proxmox_node }}"
+              
+              # Check if TUN config already exists
+              if ! ssh root@${PROXMOX_NODE} "grep -q 'lxc.cgroup2.devices.allow: c 10:200 rwm' /etc/pve/lxc/${LXC_ID}.conf"; then
+                echo "Adding TUN device configuration..."
+                ssh root@${PROXMOX_NODE} "cat >> /etc/pve/lxc/${LXC_ID}.conf" <<TUNCONF
+# allow TUN device
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+TUNCONF
+                echo "✓ TUN device configured for LXC ${LXC_ID}"
+                
+                # Restart container to apply changes
+                echo "Restarting LXC container to apply TUN device configuration..."
+                ssh root@${PROXMOX_NODE} "pct stop ${LXC_ID} && sleep 2 && pct start ${LXC_ID}"
+                echo "✓ LXC container restarted"
+                
+                # Wait for container to be fully up
+                sleep 10
+              else
+                echo "✓ TUN device already configured for LXC ${LXC_ID}"
+              fi
+            else
+              echo "⚠️  Could not get LXC ID from Terraform output"
+            fi
+          fi
+          
           # Get Tailscale auth key for Ansible
           export TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
           if [ -n "$TAILSCALE_AUTH_KEY" ]; then

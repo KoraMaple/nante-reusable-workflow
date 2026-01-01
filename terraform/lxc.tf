@@ -45,12 +45,6 @@ resource "proxmox_lxc" "container" {
     keyctl  = var.lxc_unprivileged ? true : false  # Required for Tailscale (only works with unprivileged)
   }
   
-  # Allow access to TUN device for Tailscale VPN
-  # This adds the necessary device permissions and mount entry
-  # Equivalent to: pct set <CTID> --dev0 /dev/net/tun
-  # Note: The Proxmox provider handles this via the features and we may need
-  # to manually configure via pct if the provider doesn't support it directly
-  
   # Start on boot
   onboot = true
   start  = true
