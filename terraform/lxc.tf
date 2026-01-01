@@ -32,7 +32,7 @@ resource "proxmox_lxc" "container" {
   # DNS configuration
   # LXC containers don't inherit DNS from host, must be explicitly set
   nameserver = "8.8.8.8"
-  searchdomain = "pmx.koramaple.com"
+  searchdomain = "tail09bdcf.ts.net"
   
   # SSH public key for root user
   # Note: LXC containers only support adding SSH keys to root user

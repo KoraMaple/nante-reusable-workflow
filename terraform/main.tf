@@ -66,7 +66,7 @@ resource "proxmox_vm_qemu" "generic_vm" {
   ciupgrade  = false
   ipconfig0  = "ip=${var.vm_target_ip}/24,gw=${local.gateway}"
   nameserver = "192.168.${var.vlan_tag}.1"
-  searchdomain = "pmx.koramaple.com"
+  searchdomain = "tail09bdcf.ts.net"
  
   # Important: trimspace ensures no leading/trailing whitespace breaks the key
   sshkeys = trimspace(var.ssh_public_key)

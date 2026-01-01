@@ -1,4 +1,4 @@
 ---
 # FreeIPA Server default variables
-freeipa_domain: "pmx.koramaple.com"
-freeipa_realm: "PMX.KORAMAPLE.COM"
+freeipa_domain: "tail09bdcf.ts.net"
+freeipa_realm: "TAIL09BDCF.TS.NET"

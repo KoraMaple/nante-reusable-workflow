@@ -4,9 +4,9 @@
 
 - name: Set FreeIPA client facts
   set_fact:
-    freeipa_server: "{{ freeipa_server_hostname | default('freeipa.kora.ldap.local') }}"
-    freeipa_domain: "kora.ldap.local"
-    freeipa_realm: "KORA.LDAP.LOCAL"
+    freeipa_server: "{{ freeipa_server_hostname | default('freeipa.tail09bdcf.ts.net') }}"
+    freeipa_domain: "tail09bdcf.ts.net"
+    freeipa_realm: "TAIL09BDCF.TS.NET"
 
 - name: Update /etc/hosts with FreeIPA server
   lineinfile:

@@ -37,8 +37,8 @@
 
 - name: Set all FreeIPA facts
   set_fact:
-    freeipa_domain: "pmx.koramaple.com"
-    freeipa_realm: "PMX.KORAMAPLE.COM"
+    freeipa_domain: "tail09bdcf.ts.net"
+    freeipa_realm: "TAIL09BDCF.TS.NET"
     ipa_admin_password: "{{ admin_password_result.stdout }}"
     ipa_ds_password: "{{ ds_password_result.stdout }}"
     freeipa_hostname: "{{ target_hostname }}.{{ freeipa_domain }}"
