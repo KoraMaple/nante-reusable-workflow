@@ -148,6 +148,10 @@
   failed_when: false
   changed_when: false
 
+- name: Debug Tailscale auth key
+  debug:
+    msg: "Tailscale auth key present: {{ 'yes' if ts_authkey else 'no' }}, Target hostname: {{ target_hostname }}"
+
 - name: Install and configure Tailscale (if not managed by Terraform)
   when: tailscale_status.rc != 0
   block:
@@ -157,12 +161,16 @@
         creates: /usr/bin/tailscale
 
     - name: Connect to Tailscale
-      command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }}"
+      command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }} --accept-routes"
       environment:
         TS_AUTHKEY: "{{ ts_authkey }}"
       register: tailscale_result
       changed_when: "'Success' in tailscale_result.stdout or tailscale_result.rc == 0"
       failed_when: false
+
+    - name: Debug Tailscale connection result
+      debug:
+        var: tailscale_result
 
 - name: Verify Tailscale is connected
   when: tailscale_status.rc != 0
@@ -174,6 +182,11 @@
       retries: 10
       delay: 3
       failed_when: false
+
+    - name: Show Tailscale status if failed
+      debug:
+        msg: "Tailscale status check failed. RC: {{ tailscale_check.rc }}, Output: {{ tailscale_check.stdout | default('') }}"
+      when: tailscale_check.rc != 0
 
 - name: Display Tailscale status
   debug:
