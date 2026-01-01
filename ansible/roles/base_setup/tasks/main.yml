@@ -160,6 +160,17 @@
       args:
         creates: /usr/bin/tailscale
 
+    - name: Ensure tailscaled service is started
+      service:
+        name: tailscaled
+        state: started
+        enabled: yes
+
+    - name: Wait for tailscaled socket to be available
+      wait_for:
+        path: /var/run/tailscale/tailscaled.sock
+        timeout: 30
+
     - name: Connect to Tailscale
       command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }} --accept-routes"
       environment:
