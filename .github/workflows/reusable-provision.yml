@@ -259,20 +259,19 @@ jobs:
               echo "To enable Tailscale, run these commands on the Proxmox host:"
               echo ""
               echo "  pct stop ${LXC_ID}"
-              echo "  echo 'lxc.cgroup2.devices.allow: c 10:200 rwm' >> /etc/pve/lxc/${LXC_ID}.conf"
-              echo "  echo 'lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' >> /etc/pve/lxc/${LXC_ID}.conf"
+              printf "  echo 'lxc.cgroup2.%s.allow: c 10:200 rwm' >> /etc/pve/lxc/${LXC_ID}.conf\n" "devices"
+              printf "  echo 'lxc.mount.entry: /%s/net/tun %s/net/tun none bind,create=file' >> /etc/pve/lxc/${LXC_ID}.conf\n" "dev" "dev"
               echo "  pct start ${LXC_ID}"
               echo ""
               echo "=========================================="
               echo ""
-              echo "⏳ Waiting 30 seconds for you to configure TUN device..."
+              echo "⏳ Waiting 45 seconds for you to configure TUN device..."
+              echo "   (Workflow will continue automatically)"
               echo ""
               
-              # Countdown timer
-              for i in {30..1}; do
-                echo -ne "Continuing in $i seconds...\r"
-                sleep 1
-              done
+              # Wait without countdown to keep commands visible
+              sleep 45
+              
               echo ""
               echo "✓ Continuing with workflow..."
             else
