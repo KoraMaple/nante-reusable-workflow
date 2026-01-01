@@ -51,13 +51,14 @@
     --realm={{ freeipa_realm }}
     --principal=admin
     --password={{ freeipa_admin_password }}
-    --hostname={{ ansible_fqdn | default(ansible_hostname + '.' + freeipa_domain) }}
+    --hostname={{ target_hostname }}.{{ freeipa_domain }}
     --mkhomedir
     --no-ntp
     --unattended
   when: 
     - not ipa_enrolled.stat.exists
     - freeipa_admin_password is defined
+    - target_hostname is defined
   register: ipa_client_install
 
 - name: Display enrollment result
