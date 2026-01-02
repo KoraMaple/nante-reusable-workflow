@@ -2,20 +2,29 @@
 # LDAP Client Configuration for FreeIPA
 # This role configures servers to authenticate against FreeIPA
 
+- name: Get hostname from server if target_hostname is not set
+  command: hostname -s
+  register: server_hostname
+  changed_when: false
+  when: target_hostname is not defined or target_hostname == ''
+
 - name: Set FreeIPA client facts
   set_fact:
     freeipa_server: "{{ freeipa_server_hostname | default('freeipa-dev-7ee9.tail09bdcf.ts.net') }}"
     freeipa_domain: "tail09bdcf.ts.net"
     freeipa_realm: "TAIL09BDCF.TS.NET"
-    # Construct full hostname - target_hostname is passed from workflow
-    freeipa_client_hostname: "{{ target_hostname | default(ansible_hostname) }}.{{ freeipa_domain }}"
+    # Use target_hostname from workflow, or fall back to server's hostname
+    effective_hostname: "{{ target_hostname if (target_hostname is defined and target_hostname != '') else server_hostname.stdout }}"
+    # Construct full hostname for FreeIPA enrollment
+    freeipa_client_hostname: "{{ (target_hostname if (target_hostname is defined and target_hostname != '') else server_hostname.stdout) }}.{{ freeipa_domain }}"
 
 - name: Debug FreeIPA enrollment variables
   debug:
     msg:
       - "FreeIPA Server: {{ freeipa_server }}"
       - "FreeIPA Domain: {{ freeipa_domain }}"
-      - "Target Hostname: {{ target_hostname | default('NOT SET') }}"
+      - "Target Hostname (from workflow): {{ target_hostname | default('NOT SET') }}"
+      - "Effective Hostname: {{ effective_hostname }}"
       - "Client Hostname: {{ freeipa_client_hostname }}"
       - "Admin Password Set: {{ 'yes' if freeipa_admin_password is defined else 'no' }}"
 
