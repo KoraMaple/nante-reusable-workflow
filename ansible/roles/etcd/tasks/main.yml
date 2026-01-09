@@ -1,0 +1,69 @@
+---
+- name: Install etcd prerequisites
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - python3-setuptools
+    state: present
+    update_cache: yes
+
+- name: Add etcd user
+  ansible.builtin.user:
+    name: etcd
+    system: yes
+    shell: /bin/false
+    home: /var/lib/etcd
+    create_home: yes
+
+- name: Create etcd directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: '0755'
+  loop:
+    - /etc/etcd
+    - /var/lib/etcd
+
+- name: Download and install etcd
+  ansible.builtin.unarchive:
+    src: "https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+    creates: /tmp/etcd-v{{ etcd_version }}-linux-amd64
+
+- name: Copy etcd binaries
+  ansible.builtin.copy:
+    src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/{{ item }}"
+    dest: /usr/local/bin/
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - etcd
+    - etcdctl
+
+- name: Create etcd configuration
+  ansible.builtin.template:
+    src: etcd.conf.yml.j2
+    dest: /etc/etcd/etcd.conf.yml
+    owner: etcd
+    group: etcd
+    mode: '0644'
+  notify: restart etcd
+
+- name: Create etcd systemd service
+  ansible.builtin.template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart etcd
+
+- name: Enable and start etcd service
+  ansible.builtin.systemd:
+    name: etcd
+    enabled: yes
+    state: started
+    daemon_reload: yes

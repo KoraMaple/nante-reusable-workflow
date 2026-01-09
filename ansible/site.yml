@@ -18,19 +18,27 @@
     octopus_space_id: "{{ lookup('env', 'OCTOPUS_SPACE_ID') | default('Spaces-1', true) }}"
     octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
     # octopus_roles can be passed as extra-vars from workflow (list format)
+    # ansible_roles is a list of roles to apply (passed from workflow)
   
-  roles:
-    # Run base_setup only if no app_role_name, or if app_role is not mgmt-docker
-    # (mgmt-docker handles its own complete Alloy config)
-    - role: base_setup
-      when: app_role_name is not defined or app_role_name == "" or app_role_name != "mgmt-docker"
+  tasks:
+    # Run base_setup by default unless mgmt-docker is in the roles list
+    # (mgmt-docker handles its own complete Alloy config and replaces base_setup)
+    - name: Apply base_setup role
+      include_role:
+        name: base_setup
+      when: ansible_roles is not defined or 'mgmt-docker' not in ansible_roles
     
     # Configure LDAP client on all VMs/CTs (except FreeIPA server itself)
-    - role: ldap-config
+    - name: Apply ldap-config role
+      include_role:
+        name: ldap-config
       when: 
-        - app_role_name is not defined or app_role_name != "freeipa"
+        - ansible_roles is not defined or 'freeipa' not in ansible_roles
         - freeipa_admin_password is defined
     
-    # This role only runs if you pass an app_role_name from GitHub
-    - role: "{{ app_role_name }}"
-      when: app_role_name is defined and app_role_name != ""
+    # Apply all roles from ansible_roles list
+    - name: Apply custom roles
+      include_role:
+        name: "{{ item }}"
+      loop: "{{ ansible_roles | default([]) }}"
+      when: ansible_roles is defined and ansible_roles | length > 0

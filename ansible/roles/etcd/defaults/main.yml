@@ -1,0 +1,4 @@
+---
+etcd_version: "3.5.11"
+etcd_cluster_state: "new"
+etcd_cluster_token: "patroni-cluster"

@@ -2,29 +2,29 @@
 # This file handles LXC container provisioning as an alternative to VMs
 
 resource "proxmox_lxc" "container" {
-  count = var.resource_type == "lxc" ? 1 : 0
+  for_each = var.resource_type == "lxc" ? local.instance_map : {}
   
   target_node  = var.proxmox_target_node
-  hostname     = local.vm_hostname
+  hostname     = local.vm_hostnames[each.key]
   ostemplate   = var.lxc_template
   unprivileged = var.lxc_unprivileged
   
   # Resource allocation
-  cores  = var.vm_cpu_cores
-  memory = var.vm_ram_mb
+  cores  = coalesce(each.value.cpu_cores, var.vm_cpu_cores)
+  memory = coalesce(each.value.ram_mb, var.vm_ram_mb)
   swap   = 512  # 512MB swap
   
   # Root filesystem
   rootfs {
     storage = var.proxmox_storage
-    size    = "${var.vm_disk_gb}"
+    size    = coalesce(each.value.disk_gb, var.vm_disk_gb)
   }
   
   # Network configuration
   network {
     name   = "eth0"
     bridge = "vmbr0"
-    ip     = "${var.vm_target_ip}/24"
+    ip     = "${each.value.ip_address}/24"
     gw     = local.gateway
     tag    = var.vlan_tag
   }
@@ -68,20 +68,26 @@ resource "proxmox_lxc" "container" {
   # The workflow includes extended wait time (3 minutes) for LXC containers
 }
 
-# Output container ID
-output "lxc_id" {
-  value       = var.resource_type == "lxc" ? proxmox_lxc.container[0].vmid : null
-  description = "LXC container ID (CTID)"
+# Output container IDs
+output "lxc_ids" {
+  value = var.resource_type == "lxc" ? {
+    for key, container in proxmox_lxc.container :
+    key => container.vmid
+  } : {}
+  description = "Map of LXC container IDs (CTID)"
 }
 
-# Output container IP
-output "lxc_ip" {
-  value       = var.resource_type == "lxc" ? var.vm_target_ip : null
-  description = "LXC container IP address"
+# Output container IPs
+output "lxc_ips" {
+  value = var.resource_type == "lxc" ? {
+    for key, instance in local.instance_map :
+    key => instance.ip_address
+  } : {}
+  description = "Map of LXC container IP addresses"
 }
 
-# Output container hostname
-output "lxc_hostname" {
-  value       = var.resource_type == "lxc" ? local.vm_hostname : null
-  description = "LXC container hostname"
+# Output container hostnames
+output "lxc_hostnames" {
+  value = var.resource_type == "lxc" ? local.vm_hostnames : {}
+  description = "Map of LXC container hostnames"
 }

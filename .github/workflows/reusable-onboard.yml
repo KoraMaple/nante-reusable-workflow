@@ -16,9 +16,9 @@ on:
         type: string
         description: 'Hostname to set'
         required: true
-      app_role:
+      ansible_roles:
         type: string
-        description: 'Application Role (e.g. nginx)'
+        description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
         required: false
         default: ''
       # Octopus Deploy configuration
@@ -177,13 +177,30 @@ jobs:
             echo "✓ Using Tailscale auth key for onboarding"
           fi
           
+          # Parse ansible_roles from comma-separated string to JSON array
+          ANSIBLE_ROLES_JSON="[]"
+          if [ -n "${{ inputs.ansible_roles }}" ]; then
+            IFS=',' read -ra ROLES <<< "${{ inputs.ansible_roles }}"
+            ANSIBLE_ROLES_JSON="["
+            for i in "${!ROLES[@]}"; do
+              ROLE=$(echo "${ROLES[$i]}" | xargs)  # trim whitespace
+              if [ -n "$ROLE" ]; then
+                [ "$i" -gt 0 ] && ANSIBLE_ROLES_JSON+=","
+                ANSIBLE_ROLES_JSON+="\"$ROLE\""
+              fi
+            done
+            ANSIBLE_ROLES_JSON+="]"
+          fi
+          
+          echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
+          
           # Run playbook with Octopus configuration
           # Octopus Tentacle is now part of base_setup, so it runs automatically
           ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
             --user "${{ inputs.ssh_user }}" \
             --ssh-common-args='-o StrictHostKeyChecking=no' \
             --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
-            --extra-vars "app_role_name=${{ inputs.app_role }}" \
+            --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
             --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
             --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON"
           

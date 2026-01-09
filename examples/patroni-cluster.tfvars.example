@@ -1,0 +1,46 @@
+# Terraform variables for 3-node Patroni HA cluster deployment
+# Copy this file to patroni-cluster.tfvars and fill in your values
+
+# Resource configuration
+resource_type = "vm"  # or "lxc"
+app_name      = "patroni"
+environment   = "prod"
+
+# Network configuration
+vlan_tag = "10"  # 10 = DMZ/production, 20 = internal dev
+
+# Multi-instance configuration for 3-node cluster
+instances = {
+  node1 = {
+    ip_address = "192.168.10.51"
+    cpu_cores  = "2"
+    ram_mb     = "4096"
+    disk_gb    = "40G"
+  }
+  node2 = {
+    ip_address = "192.168.10.52"
+    cpu_cores  = "2"
+    ram_mb     = "4096"
+    disk_gb    = "40G"
+  }
+  node3 = {
+    ip_address = "192.168.10.53"
+    cpu_cores  = "2"
+    ram_mb     = "4096"
+    disk_gb    = "40G"
+  }
+}
+
+# Proxmox configuration
+proxmox_target_node = "pmx"
+proxmox_storage     = "zfs-vm"
+vm_template         = "ubuntu-2404-template"
+
+# Tailscale (optional)
+enable_tailscale_terraform = false
+
+# These should be set via environment variables or Terraform Cloud:
+# TF_VAR_proxmox_api_url
+# TF_VAR_proxmox_api_token_id
+# TF_VAR_proxmox_api_token_secret
+# TF_VAR_ssh_public_key

@@ -32,25 +32,32 @@ This repository hosts reusable GitHub Actions workflows for provisioning and con
 - **Hypervisor:** Proxmox VE
 - **Scripting:** Go (Golang)
 
-## Current State (Phase 1 - Complete ✓)
+## Current State (Phase 1-3 - Complete ✓)
 
 ### Implemented Features
 
 **Infrastructure Provisioning:**
 - ✓ VM provisioning via Terraform + Proxmox (`reusable-provision.yml`)
+- ✓ LXC container provisioning with full support (`reusable-provision.yml`)
+- ✓ **Multi-instance deployments** - provision multiple VMs/LXCs in single run
 - ✓ VM destruction with safety checks (`reusable-destroy.yml`)
 - ✓ Existing infrastructure onboarding (`reusable-onboard.yml`)
 - ✓ Bootstrap workflow for initial user setup (`reusable-bootstrap.yml`)
-- ✓ Configurable: CPU, RAM, disk, VLAN, storage, node, template
+- ✓ Configurable: CPU, RAM, disk, VLAN, storage, node, template per instance
 - ✓ Terraform state in MinIO with workspace isolation per app
 - ✓ Optional `skip_terraform` flag for existing VMs
+- ✓ Support for cluster deployments (e.g., 3-node Patroni HA)
 
 **Configuration Management:**
 - ✓ Ansible-based configuration with dynamic role selection
 - ✓ `base_setup` role: Tailscale, Alloy observability, system config
 - ✓ `mgmt-docker` role: Docker host monitoring (containers + logs)
 - ✓ `nginx` role: Web server setup
-- ✓ SSH key-based authentication via `deploy` user
+- ✓ `etcd` role: Distributed consensus for HA clusters
+- ✓ `patroni` role: PostgreSQL HA with automatic failover
+- ✓ `ldap-config` role: FreeIPA LDAP client enrollment
+- ✓ `octopus-tentacle` role: Octopus Deploy agent
+- ✓ SSH key-based authentication via `deploy` user (VMs) or `root` (LXC)
 
 **Secret Management:**
 - ✓ Doppler CLI integration with `doppler run` for secret injection
@@ -89,10 +96,19 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 - ✅ Conditional Ansible installation (hybrid approach)
 - ✅ Migration documentation
 
-**Phase 3 - LXC Container Support:**
-- Terraform module for Proxmox LXC
-- LXC provisioning workflow
-- Container-optimized Ansible roles
+**Phase 3 - LXC Container Support (Complete - v1.1.0):**
+- ✅ Terraform module for Proxmox LXC
+- ✅ LXC provisioning via `reusable-provision.yml` (resource_type=lxc)
+- ✅ Container-optimized Ansible roles (root user, TUN device support)
+- ✅ Unprivileged containers with nesting support for Docker
+- ✅ Multi-instance LXC deployments
+
+**Phase 3.5 - Database HA Clusters (Complete - v1.2.0):**
+- ✅ Patroni role for PostgreSQL HA
+- ✅ etcd role for distributed consensus
+- ✅ Multi-node cluster playbook (`patroni-cluster.yml`)
+- ✅ Automatic failover and streaming replication
+- ✅ Comprehensive documentation for cluster deployments
 
 **Phase 4 - Kubernetes & Docker Deployments:**
 - Multi-node K3s cluster setup
@@ -116,17 +132,33 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 - **Provider:** `Telmate/proxmox`
 - **State Backend:** MinIO S3 at `http://192.168.20.10:9000`
 - **Workspace Strategy:** One workspace per application for state isolation
-- **Resources:** VMs (current), LXCs (future)
+- **Resources:** VMs and LXCs with multi-instance support
+
+**Deployment Modes:**
+1. **Single Instance Mode** (backward compatible):
+   - Use `vm_target_ip` for single VM/LXC
+   - Hostname: `${app_name}-${environment}-${random_hex}`
+
+2. **Multi-Instance Mode** (for clusters):
+   - Use `instances` map with named nodes
+   - Hostname: `${app_name}-${environment}-${instance_key}`
+   - Each instance can override CPU/RAM/disk defaults
+   - Example: `{"node1": {"ip_address": "192.168.10.51"}}`
 
 **Configurable Parameters:**
+- `resource_type`: `vm` or `lxc`
 - `proxmox_node` (default: `pmx`)
 - `proxmox_storage` (default: `zfs-vm`)
 - `vm_template` (default: `ubuntu-2404-template`)
-- `target_node`, `storage`, `clone` can be overridden per deployment
+- `lxc_template` (default: Ubuntu 22.04 LXC template)
+- `lxc_unprivileged` (default: `true`)
+- `lxc_nesting` (default: `false`, set `true` for Docker)
+- `instances`: JSON map for multi-instance deployments
 
 **Conventions:**
 - Gateway: `192.168.<vlan_tag>.1`
-- VM naming: `${app_name}-vm`
+- Single instance naming: `${app_name}-${environment}-${random_hex}`
+- Multi-instance naming: `${app_name}-${environment}-${instance_key}`
 - Workspace naming: `${app_name}`
 
 ### Ansible (`/ansible`)
@@ -155,17 +187,38 @@ See `ARCHITECTURE.md` for detailed implementation plan.
   - Installs and configures Nginx
   - Alloy integration for logs
   
+- **`etcd`**: Distributed key-value store
+  - etcd cluster setup for HA configurations
+  - Used by Patroni for leader election
+  - Configurable cluster size (typically 3 nodes)
+  
+- **`patroni`**: PostgreSQL High Availability
+  - Patroni-managed PostgreSQL clusters
+  - Automatic failover and streaming replication
+  - Integration with etcd for consensus
+  - Configurable PostgreSQL parameters
+  
+- **`ldap-config`**: LDAP client configuration
+  - FreeIPA client enrollment
+  - SSSD configuration for centralized auth
+  
 - **`octopus-tentacle`**: Octopus Deploy agent
   - Installs Tentacle on Linux
   - Registers with Octopus Server
   - Supports Polling and Listening modes
   - Configurable environments and roles
+  
+- **`freeipa`**: FreeIPA server (specialized deployment)
+  - Identity management server setup
+  
 - **`k3s-cluster`** (FUTURE): Kubernetes cluster
 - **`app-deploy`** (FUTURE): Application deployment
 
 **Dynamic Role Selection:**
-- Pass `app_role_name` to apply specific role
-- `base_setup` always runs unless role is `mgmt-docker`
+- Pass `ansible_roles` as comma-separated list (e.g., `nginx,freeipa`)
+- `base_setup` always runs unless `mgmt-docker` is in the roles list
+- Roles are applied in order: `base_setup` → `ldap-config` → custom roles
+- Each role runs independently with proper error handling
 
 ### GitHub Actions Workflows
 **Purpose:** Orchestration and automation
@@ -173,10 +226,28 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 **Runner:** Self-hosted (required for Proxmox LAN access)
 
 **Current Workflows:**
-1. **`reusable-provision.yml`**: Provision VM + configure with Ansible
-2. **`reusable-destroy.yml`**: Destroy VM and clean up state
+1. **`reusable-provision.yml`**: Provision VM/LXC (single or multi-instance) + configure with Ansible
+2. **`reusable-destroy.yml`**: Destroy VM/LXC and clean up state
 3. **`reusable-onboard.yml`**: Configure existing infrastructure
 4. **`reusable-bootstrap.yml`**: Initial user setup on existing VMs
+
+**Workflow Input Parameters:**
+- `resource_type`: `vm` or `lxc`
+- `vm_target_ip`: Single instance IP (legacy mode)
+- `instances`: JSON map for multi-instance deployments
+- `cpu_cores`, `ram_mb`, `disk_gb`: Default resource allocation
+- `lxc_nesting`: Enable Docker in LXC
+- `lxc_unprivileged`: Run LXC as unprivileged (recommended)
+- `ansible_roles`: Comma-separated list of Ansible roles to apply (e.g., `nginx,mgmt-docker`)
+- `skip_terraform`: Skip infrastructure provisioning
+- `skip_octopus`: Skip Octopus Tentacle registration
+
+**Ansible Role Execution:**
+- `base_setup` always runs by default (Tailscale, Alloy, system config)
+- `ldap-config` runs automatically if FreeIPA credentials are available
+- `mgmt-docker` replaces `base_setup` (includes its own Alloy config)
+- Custom roles specified in `ansible_roles` run after base roles
+- Multiple roles can be applied in a single workflow run
 
 **Design Patterns:**
 - Accept flags for modularity (`skip_terraform`, `skip_provision`)
@@ -259,13 +330,27 @@ terraform workspace show
 terraform workspace list
 ```
 
-**Variable Passing:**
+**Variable Passing (Single Instance):**
 ```bash
 terraform plan \
   -var="app_name=myapp" \
   -var="vlan_tag=20" \
   -var="vm_target_ip=192.168.20.50" \
+  -var="resource_type=vm" \
   -var="proxmox_target_node=pmx" \
+  -out=tfplan
+
+terraform apply tfplan
+```
+
+**Variable Passing (Multi-Instance):**
+```bash
+terraform plan \
+  -var="app_name=patroni" \
+  -var="environment=prod" \
+  -var="vlan_tag=10" \
+  -var="resource_type=vm" \
+  -var='instances={"node1":{"ip_address":"192.168.10.51"},"node2":{"ip_address":"192.168.10.52"},"node3":{"ip_address":"192.168.10.53"}}' \
   -out=tfplan
 
 terraform apply tfplan
@@ -283,11 +368,17 @@ ansible-galaxy install -r requirements.yml
 # Test connectivity
 ansible all -i "192.168.20.50," -m ping --user deploy
 
-# Run playbook
+# Run playbook with single role
 ansible-playbook -i "192.168.20.50," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
-  --extra-vars "app_role_name=nginx"
+  --extra-vars 'ansible_roles=["nginx"]'
+
+# Run playbook with multiple roles
+ansible-playbook -i "192.168.20.50," site.yml \
+  --user deploy \
+  --extra-vars "target_hostname=myapp" \
+  --extra-vars 'ansible_roles=["nginx","mgmt-docker"]'
 ```
 
 **Secret Handling:**

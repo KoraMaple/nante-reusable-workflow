@@ -14,8 +14,14 @@ on:
         default: '20'
       vm_target_ip:
         type: string
-        description: 'Target IP Address'
-        required: true
+        description: 'Target IP Address (for single instance)'
+        required: false
+        default: ''
+      instances:
+        type: string
+        description: 'JSON map of instances for multi-instance deployments (e.g., {"node1":{"ip_address":"192.168.10.51"}}). Leave empty for single instance mode.'
+        required: false
+        default: ''
       cpu_cores:
         type: string
         description: 'CPU Cores'
@@ -95,6 +101,11 @@ on:
         description: 'Skip Octopus Tentacle registration'
         required: false
         default: false
+      ansible_roles:
+        type: string
+        description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
+        required: false
+        default: ''
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -129,14 +140,21 @@ jobs:
       - name: Validate VLAN and IP Match
         run: |
           VLAN="${{ inputs.vlan_tag }}"
-          IP="${{ inputs.vm_target_ip }}"
-          EXPECTED_PREFIX="192.168.${VLAN}."
           
-          if [[ ! "$IP" == ${EXPECTED_PREFIX}* ]]; then
-            echo "❌ Error: IP '$IP' does not match VLAN $VLAN (expected ${EXPECTED_PREFIX}x)"
-            exit 1
+          # Check if using multi-instance mode
+          if [ -n "${{ inputs.instances }}" ]; then
+            echo "✓ Multi-instance mode detected"
+            # Validation will happen in Terraform
+          else
+            IP="${{ inputs.vm_target_ip }}"
+            EXPECTED_PREFIX="192.168.${VLAN}."
+            
+            if [[ ! "$IP" == ${EXPECTED_PREFIX}* ]]; then
+              echo "❌ Error: IP '$IP' does not match VLAN $VLAN (expected ${EXPECTED_PREFIX}x)"
+              exit 1
+            fi
+            echo "✓ VLAN $VLAN and IP $IP are valid"
           fi
-          echo "✓ VLAN $VLAN and IP $IP are valid"
 
       - name: Terraform Init, Plan, and Apply
         if: ${{ inputs.skip_terraform != true }}
@@ -217,23 +235,34 @@ jobs:
           echo "Note: Upload to Proxmox at /var/lib/vz/snippets/${{ inputs.app_name }}-tailscale.yml"
           
           # Terraform Plan
-          terraform plan \
-            -var="app_name=${{ inputs.app_name }}" \
-            -var="environment=${{ inputs.environment }}" \
-            -var="vlan_tag=${{ inputs.vlan_tag }}" \
-            -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
-            -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
-            -var="vm_ram_mb=${{ inputs.ram_mb }}" \
-            -var="vm_disk_gb=${{ inputs.disk_gb }}" \
-            -var="proxmox_target_node=${{ inputs.proxmox_node }}" \
-            -var="proxmox_storage=${{ inputs.proxmox_storage }}" \
-            -var="vm_template=${{ inputs.vm_template }}" \
-            -var="resource_type=${{ inputs.resource_type }}" \
-            -var="lxc_template=${{ inputs.lxc_template }}" \
-            -var="lxc_nesting=${{ inputs.lxc_nesting }}" \
-            -var="lxc_unprivileged=${{ inputs.lxc_unprivileged }}" \
-            -var="enable_tailscale_terraform=false" \
-            -out=tfplan
+          PLAN_ARGS=(
+            -var="app_name=${{ inputs.app_name }}"
+            -var="environment=${{ inputs.environment }}"
+            -var="vlan_tag=${{ inputs.vlan_tag }}"
+            -var="vm_cpu_cores=${{ inputs.cpu_cores }}"
+            -var="vm_ram_mb=${{ inputs.ram_mb }}"
+            -var="vm_disk_gb=${{ inputs.disk_gb }}"
+            -var="proxmox_target_node=${{ inputs.proxmox_node }}"
+            -var="proxmox_storage=${{ inputs.proxmox_storage }}"
+            -var="vm_template=${{ inputs.vm_template }}"
+            -var="resource_type=${{ inputs.resource_type }}"
+            -var="lxc_template=${{ inputs.lxc_template }}"
+            -var="lxc_nesting=${{ inputs.lxc_nesting }}"
+            -var="lxc_unprivileged=${{ inputs.lxc_unprivileged }}"
+            -var="enable_tailscale_terraform=false"
+          )
+          
+          # Add instances or vm_target_ip based on mode
+          if [ -n "${{ inputs.instances }}" ]; then
+            echo "Using multi-instance mode"
+            echo '${{ inputs.instances }}' > /tmp/instances.json
+            PLAN_ARGS+=(-var="instances=$(cat /tmp/instances.json)")
+          else
+            echo "Using single-instance mode"
+            PLAN_ARGS+=(-var="vm_target_ip=${{ inputs.vm_target_ip }}")
+          fi
+          
+          terraform plan "${PLAN_ARGS[@]}" -out=tfplan
           
           # Terraform Apply
           if ! terraform apply tfplan; then
@@ -467,20 +496,40 @@ jobs:
             echo "⚠️  FreeIPA credentials not found in Doppler - LDAP client will not be configured"
           fi
           
+          # Parse ansible_roles from comma-separated string to JSON array
+          ANSIBLE_ROLES_JSON="[]"
+          if [ -n "${{ inputs.ansible_roles }}" ]; then
+            IFS=',' read -ra ROLES <<< "${{ inputs.ansible_roles }}"
+            ANSIBLE_ROLES_JSON="["
+            for i in "${!ROLES[@]}"; do
+              ROLE=$(echo "${ROLES[$i]}" | xargs)  # trim whitespace
+              if [ -n "$ROLE" ]; then
+                [ "$i" -gt 0 ] && ANSIBLE_ROLES_JSON+=","
+                ANSIBLE_ROLES_JSON+="\"$ROLE\""
+              fi
+            done
+            ANSIBLE_ROLES_JSON+="]"
+          fi
+          
+          echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
+          
           ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
             --user $ANSIBLE_USER \
             $BECOME_FLAG \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
             --extra-vars "target_hostname=$VM_HOSTNAME" \
             --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-            --extra-vars "app_role_name=${{ inputs.app_name }}" \
+            --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
             --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
             --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
             --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
             --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
             --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
           
-          echo "✓ VM provisioned and configured"
+          echo "✓ VM/LXC provisioned and configured"
+          if [ -n "${{ inputs.ansible_roles }}" ]; then
+            echo "✓ Applied roles: ${{ inputs.ansible_roles }}"
+          fi
           echo "✓ Octopus Tentacle installed and registered"
           echo ""
           echo "📋 Next steps:"
