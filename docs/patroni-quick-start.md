@@ -38,62 +38,35 @@ jobs:
           "node2": {"ip_address": "192.168.10.52"},
           "node3": {"ip_address": "192.168.10.53"}
         }
+      ansible_roles: "etcd,patroni"
 ```
 
-### 2. Trigger Provisioning
+### 2. Configure Secrets in Doppler
+
+Ensure these secrets are set in your Doppler project/config:
+
+```bash
+PATRONI_SUPERUSER_PASSWORD=your_secure_superuser_password
+PATRONI_ADMIN_PASSWORD=your_secure_admin_password
+PATRONI_REPLICATION_PASSWORD=your_secure_replication_password
+```
+
+### 3. Trigger Deployment
 
 ```bash
 gh workflow run deploy-patroni.yml
 ```
 
-This creates 3 VMs with basic setup.
+This single workflow run will:
+1. Create 3 VMs with Terraform
+2. Configure base system (Tailscale, Alloy, etc.)
+3. Configure LDAP client (if FreeIPA credentials available)
+4. Install and configure etcd cluster
+5. Install and configure Patroni PostgreSQL HA cluster
 
-### 3. Create Inventory File
+**Wait 5-10 minutes** for the entire deployment to complete.
 
-In your caller repo, create `inventory/patroni-cluster.ini`:
-
-```ini
-[all:vars]
-ansible_user=deploy
-etcd_cluster_token=patroni-cluster
-patroni_scope=postgres-cluster
-postgresql_version=15
-
-[etcd]
-patroni-prod-node1 ansible_host=192.168.10.51 etcd_node_name=etcd1
-patroni-prod-node2 ansible_host=192.168.10.52 etcd_node_name=etcd2
-patroni-prod-node3 ansible_host=192.168.10.53 etcd_node_name=etcd3
-
-[patroni]
-patroni-prod-node1 ansible_host=192.168.10.51 patroni_node_name=patroni1
-patroni-prod-node2 ansible_host=192.168.10.52 patroni_node_name=patroni2
-patroni-prod-node3 ansible_host=192.168.10.53 patroni_node_name=patroni3
-
-[etcd:vars]
-etcd_initial_cluster=etcd1=http://192.168.10.51:2380,etcd2=http://192.168.10.52:2380,etcd3=http://192.168.10.53:2380
-
-[patroni:vars]
-etcd_cluster_endpoints=192.168.10.51:2379,192.168.10.52:2379,192.168.10.53:2379
-```
-
-### 4. Run Patroni Configuration
-
-```bash
-# Clone reusable workflow repo for Ansible roles
-git clone https://github.com/KoraMaple/nante-reusable-workflow.git
-cd nante-reusable-workflow/ansible
-
-# Copy your inventory
-cp /path/to/your/repo/inventory/patroni-cluster.ini inventory/
-
-# Run playbook
-ansible-playbook -i inventory/patroni-cluster.ini patroni-cluster.yml \
-  -e "patroni_superuser_password=SECURE_PASSWORD" \
-  -e "patroni_admin_password=SECURE_PASSWORD" \
-  -e "patroni_replication_password=SECURE_PASSWORD"
-```
-
-### 5. Verify
+### 4. Verify
 
 ```bash
 # SSH to any node

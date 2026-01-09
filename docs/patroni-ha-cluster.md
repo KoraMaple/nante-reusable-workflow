@@ -67,6 +67,7 @@ jobs:
           "node2": {"ip_address": "192.168.10.52"},
           "node3": {"ip_address": "192.168.10.53"}
         }
+      ansible_roles: "etcd,patroni"
 ```
 
 **Note:** The `instances` parameter is a JSON string. Each instance inherits the default `cpu_cores`, `ram_mb`, and `disk_gb` values unless overridden:
@@ -97,87 +98,34 @@ gh workflow run deploy-patroni-cluster.yml
 The reusable workflow will:
 1. Create 3 VMs using Terraform with the specified IPs
 2. Wait for VMs to boot
-3. Run basic Ansible setup (base_setup role)
+3. Run Ansible configuration:
+   - `base_setup` role (Tailscale, Alloy, system config)
+   - `ldap-config` role (FreeIPA LDAP enrollment, if credentials available)
+   - `etcd` role (distributed consensus cluster)
+   - `patroni` role (PostgreSQL HA cluster)
 
-After provisioning completes, the VMs are ready for Patroni configuration.
+The entire cluster is provisioned and configured in a single workflow run!
 
-### 3. Configure Patroni Cluster
+### 3. Configure Secrets in Doppler
 
-After infrastructure is provisioned, configure the Patroni cluster using Ansible.
-
-**In your caller repository**, create an inventory file `inventory/patroni-cluster.ini`:
-
-```ini
-[all:vars]
-ansible_user=deploy
-ansible_become=yes
-ansible_python_interpreter=/usr/bin/python3
-
-# etcd cluster configuration
-etcd_cluster_token=patroni-cluster
-etcd_cluster_state=new
-
-# Patroni configuration
-patroni_scope=postgres-cluster
-patroni_namespace=/service/
-postgresql_version=15
-
-# CHANGE THESE PASSWORDS IN PRODUCTION!
-patroni_superuser_password=changeme_superuser
-patroni_admin_password=changeme_admin
-patroni_replication_password=changeme_replication
-
-[etcd]
-patroni-prod-node1 ansible_host=192.168.10.51 etcd_node_name=etcd1
-patroni-prod-node2 ansible_host=192.168.10.52 etcd_node_name=etcd2
-patroni-prod-node3 ansible_host=192.168.10.53 etcd_node_name=etcd3
-
-[patroni]
-patroni-prod-node1 ansible_host=192.168.10.51 patroni_node_name=patroni1
-patroni-prod-node2 ansible_host=192.168.10.52 patroni_node_name=patroni2
-patroni-prod-node3 ansible_host=192.168.10.53 patroni_node_name=patroni3
-
-[etcd:vars]
-etcd_initial_cluster=etcd1=http://192.168.10.51:2380,etcd2=http://192.168.10.52:2380,etcd3=http://192.168.10.53:2380
-
-[patroni:vars]
-etcd_cluster_endpoints=192.168.10.51:2379,192.168.10.52:2379,192.168.10.53:2379
-patroni_data_dir=/var/lib/postgresql/15/main
-```
-
-### 4. Run Patroni Playbook
-
-**Clone the reusable workflow repository** to access the Ansible roles:
+Ensure these secrets are set in your Doppler project/config:
 
 ```bash
-git clone https://github.com/KoraMaple/nante-reusable-workflow.git
-cd nante-reusable-workflow/ansible
+# PostgreSQL passwords (required by patroni role)
+PATRONI_SUPERUSER_PASSWORD=your_secure_superuser_password
+PATRONI_ADMIN_PASSWORD=your_secure_admin_password
+PATRONI_REPLICATION_PASSWORD=your_secure_replication_password
 
-# Copy your inventory file
-cp /path/to/your/repo/inventory/patroni-cluster.ini inventory/
-
-# Run the playbook
-ansible-playbook -i inventory/patroni-cluster.ini patroni-cluster.yml \
-  -e "patroni_superuser_password=YOUR_SECURE_PASSWORD" \
-  -e "patroni_admin_password=YOUR_SECURE_PASSWORD" \
-  -e "patroni_replication_password=YOUR_SECURE_PASSWORD"
+# Cluster configuration (optional, defaults shown)
+PATRONI_SCOPE=postgres-cluster
+PATRONI_NAMESPACE=/service/
+POSTGRESQL_VERSION=15
+ETCD_CLUSTER_TOKEN=patroni-cluster
 ```
 
-**Or use Ansible from your own repository** by copying the roles:
+The Ansible roles will automatically pull these from the environment during workflow execution.
 
-```bash
-# In your caller repository
-mkdir -p ansible/roles
-cp -r /path/to/nante-reusable-workflow/ansible/roles/etcd ansible/roles/
-cp -r /path/to/nante-reusable-workflow/ansible/roles/patroni ansible/roles/
-cp /path/to/nante-reusable-workflow/ansible/patroni-cluster.yml ansible/
-
-# Run from your repo
-cd ansible
-ansible-playbook -i inventory/patroni-cluster.ini patroni-cluster.yml
-```
-
-### 5. Verify Cluster Status
+### 4. Verify Cluster Status
 
 SSH into any node and check the cluster status:
 
@@ -228,12 +176,19 @@ sudo systemctl restart etcd
 
 ### Add/Remove Nodes
 
-To scale the cluster, update the `instances` map in Terraform and re-run:
-```bash
-terraform apply -var-file=patroni-cluster.tfvars
+To scale the cluster, update the `instances` map in your workflow and re-run:
+
+```yaml
+instances: |  
+  {
+    "node1": {"ip_address": "192.168.10.51"},
+    "node2": {"ip_address": "192.168.10.52"},
+    "node3": {"ip_address": "192.168.10.53"},
+    "node4": {"ip_address": "192.168.10.54"}  # New node
+  }
 ```
 
-Then update the Ansible inventory and run the playbook for the new nodes.
+The workflow will provision the new node and configure it with etcd and Patroni roles automatically.
 
 ## Monitoring
 
