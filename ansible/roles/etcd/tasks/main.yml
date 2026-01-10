@@ -73,7 +73,7 @@
     daemon_reload: yes
 
 - name: Wait for etcd to be ready
-  ansible.builtin.command: curl -sf http://{{ ansible_default_ipv4.address }}:2379/health
+  ansible.builtin.command: curl -sL http://{{ ansible_default_ipv4.address }}:2379/health
   register: etcd_health_check
   until: etcd_health_check.rc == 0
   retries: 30
