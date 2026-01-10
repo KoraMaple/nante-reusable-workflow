@@ -17,7 +17,7 @@
 
 - name: Create etcd directories
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ etcd_dir }}"
     state: directory
     owner: etcd
     group: etcd
@@ -25,6 +25,8 @@
   loop:
     - /etc/etcd
     - /var/lib/etcd
+  loop_control:
+    loop_var: etcd_dir
 
 - name: Download and install etcd
   ansible.builtin.unarchive:
@@ -35,13 +37,15 @@
 
 - name: Copy etcd binaries
   ansible.builtin.copy:
-    src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/{{ item }}"
+    src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/{{ binary }}"
     dest: /usr/local/bin/
     mode: '0755'
     remote_src: yes
   loop:
     - etcd
     - etcdctl
+  loop_control:
+    loop_var: binary
 
 - name: Create etcd configuration
   ansible.builtin.template:
