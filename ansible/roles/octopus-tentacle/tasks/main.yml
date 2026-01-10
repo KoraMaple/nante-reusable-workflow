@@ -22,13 +22,15 @@
 
 - name: Create Octopus directories
   file:
-    path: "{{ item }}"
+    path: "{{ octopus_dir }}"
     state: directory
     mode: '0755'
   loop:
     - "{{ tentacle_install_dir }}"
     - "{{ tentacle_app_dir }}"
     - "{{ tentacle_config_dir }}"
+  loop_control:
+    loop_var: octopus_dir
 
 - name: Check if Tentacle is already installed
   stat:

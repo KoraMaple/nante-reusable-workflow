@@ -1,13 +1,15 @@
 ---
 - name: Check if required ports are available
   ansible.builtin.wait_for:
-    port: "{{ item }}"
+    port: "{{ haproxy_port }}"
     state: stopped
     timeout: 1
   loop:
     - 5000
     - 5001
     - 7000
+  loop_control:
+    loop_var: haproxy_port
   register: port_check
   failed_when: false
   changed_when: false
@@ -55,13 +57,15 @@
 
 - name: Verify HAProxy is listening on ports
   ansible.builtin.wait_for:
-    port: "{{ item }}"
+    port: "{{ verify_port }}"
     state: started
     timeout: 10
   loop:
     - 5000
     - 5001
     - 7000
+  loop_control:
+    loop_var: verify_port
   register: port_verify
 
 - name: Show HAProxy logs if service failed

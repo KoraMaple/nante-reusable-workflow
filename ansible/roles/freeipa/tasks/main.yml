@@ -137,7 +137,7 @@
 
 - name: Ensure FreeIPA services are started and enabled
   systemd:
-    name: "{{ item }}"
+    name: "{{ service }}"
     state: started
     enabled: yes
   loop:
@@ -145,6 +145,8 @@
     - httpd
     - krb5kdc
     - kadmin
+  loop_control:
+    loop_var: service
 
 - name: Wait for FreeIPA web UI to be available
   uri:
@@ -238,13 +240,15 @@
       register: sudo_add_cmds
       changed_when: "'Modified Sudo Rule' in sudo_add_cmds.stdout"
 
-- name: Clean up password files
+- name: Clean up temporary password files
   file:
-    path: "{{ item }}"
+    path: "{{ temp_file }}"
     state: absent
   loop:
     - /tmp/freeipa_admin_password
     - /tmp/freeipa_ds_password
+  loop_control:
+    loop_var: temp_file
   ignore_errors: yes
 
 - name: Display final setup information
