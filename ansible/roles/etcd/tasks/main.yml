@@ -71,3 +71,33 @@
     enabled: yes
     state: started
     daemon_reload: yes
+
+- name: Wait for etcd to be ready
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:2379/health"
+    status_code: 200
+  register: etcd_health_check
+  until: etcd_health_check.status == 200
+  retries: 30
+  delay: 2
+  failed_when: false
+
+- name: Display etcd health status
+  debug:
+    msg: "etcd health check: {{ 'SUCCESS' if etcd_health_check.status == 200 else 'FAILED' }}"
+
+- name: Show etcd logs if health check failed
+  ansible.builtin.command: journalctl -u etcd -n 30 --no-pager
+  register: etcd_logs
+  when: etcd_health_check.status != 200
+  changed_when: false
+
+- name: Display etcd logs on failure
+  debug:
+    msg: "{{ etcd_logs.stdout_lines }}"
+  when: etcd_health_check.status != 200
+
+- name: Fail if etcd is not healthy
+  fail:
+    msg: "etcd failed to start. Check logs above for details."
+  when: etcd_health_check.status != 200
