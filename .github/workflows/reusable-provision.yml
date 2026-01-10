@@ -244,16 +244,21 @@ jobs:
               echo "✓ Tailscale auth key available"
             fi
             
-            # Get VM hostnames from Terraform outputs
+            # Get VM/LXC hostnames from Terraform outputs
             if [ -n "${{ inputs.instances }}" ]; then
               VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
               echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
               echo "✓ Multi-instance hostnames: $VM_HOSTNAMES_JSON"
             else
-              VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+              # Single-instance mode - check for VM or LXC hostname
+              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
+              else
+                VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+              fi
               if [ -n "$VM_HOSTNAME" ]; then
                 echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
-                echo "✓ VM hostname: $VM_HOSTNAME"
+                echo "✓ Hostname: $VM_HOSTNAME"
               fi
             fi
             
