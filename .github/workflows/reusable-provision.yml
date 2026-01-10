@@ -446,13 +446,17 @@ jobs:
             echo "✓ Multi-instance hostnames retrieved"
             echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
           else
-            # Single-instance mode - get single hostname
-            VM_HOSTNAME=$(echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[0].value' 2>/dev/null || terraform output -raw vm_hostname 2>/dev/null || echo "")
+            # Single-instance mode - get single hostname (VM or LXC)
+            if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+              VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
+            else
+              VM_HOSTNAME=$(echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[0].value' 2>/dev/null || terraform output -raw vm_hostname 2>/dev/null || echo "")
+            fi
             if [ -n "$VM_HOSTNAME" ]; then
               echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
-              echo "✓ VM hostname: $VM_HOSTNAME"
+              echo "✓ Hostname: $VM_HOSTNAME"
             else
-              echo "⚠️  No VM hostname found in Terraform output"
+              echo "⚠️  No hostname found in Terraform output"
             fi
           fi
           EOF
