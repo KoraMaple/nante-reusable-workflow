@@ -106,6 +106,11 @@ on:
         description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
         required: false
         default: ''
+      ansible_extra_vars:
+        type: string
+        description: 'Additional Ansible extra vars in JSON format (e.g., patroni_backends=[{name:node1,ip:192.168.20.61}])'
+        required: false
+        default: ''
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -698,6 +703,13 @@ jobs:
           
           echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
           
+          # Parse ansible_extra_vars if provided
+          EXTRA_VARS_FLAG=""
+          if [ -n "${{ inputs.ansible_extra_vars }}" ]; then
+            echo "✓ Additional Ansible extra vars provided"
+            EXTRA_VARS_FLAG="--extra-vars '${{ inputs.ansible_extra_vars }}'"
+          fi
+          
           # Run Ansible playbook
           # In multi-instance mode, Ansible will run against all hosts in inventory
           # Each host will get its hostname from hostvars or we'll use a generic pattern
@@ -717,7 +729,8 @@ jobs:
               --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
               --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
               --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
-              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
+              $EXTRA_VARS_FLAG
           else
             # Single-instance: pass single hostname
             TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
@@ -731,7 +744,8 @@ jobs:
               --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
               --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
               --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
-              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
+              $EXTRA_VARS_FLAG
           fi
           
           echo "✓ VM/LXC provisioned and configured"
