@@ -157,14 +157,29 @@
   when: inventory_hostname == ansible_play_hosts[0]
   register: patroni_start_first
 
-- name: Wait for first node to become leader
+- name: Wait for first node to bootstrap and become leader
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:8008/leader"
+    status_code: 200
+  register: leader_check_first
+  until: leader_check_first.status == 200
+  retries: 60
+  delay: 5
+  when: inventory_hostname == ansible_play_hosts[0]
+
+- name: Display first node bootstrap status
+  debug:
+    msg: "First node has bootstrapped and is now the leader"
+  when: inventory_hostname == ansible_play_hosts[0]
+
+- name: Wait for first node leader from other nodes
   ansible.builtin.uri:
     url: "http://{{ hostvars[ansible_play_hosts[0]]['ansible_default_ipv4']['address'] }}:8008/leader"
     status_code: 200
   register: leader_check
   until: leader_check.status == 200
-  retries: 30
-  delay: 10
+  retries: 10
+  delay: 2
   when: inventory_hostname != ansible_play_hosts[0]
 
 - name: Start Patroni on remaining nodes
