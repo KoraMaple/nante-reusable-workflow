@@ -142,18 +142,35 @@
     enabled: yes
   when: virt_type.stdout in ['kvm', 'qemu']
 
-- name: Check if Tailscale is already configured
+- name: Check if Tailscale is installed
+  command: which tailscale
+  register: tailscale_installed
+  failed_when: false
+  changed_when: false
+
+- name: Check if Tailscale is connected
   command: tailscale status --json
   register: tailscale_status
   failed_when: false
   changed_when: false
+  when: tailscale_installed.rc == 0
+
+- name: Parse Tailscale connection status
+  set_fact:
+    tailscale_connected: "{{ (tailscale_status.stdout | from_json).BackendState == 'Running' if tailscale_status.rc == 0 else false }}"
+  when: tailscale_installed.rc == 0
+
+- name: Set Tailscale not connected if not installed
+  set_fact:
+    tailscale_connected: false
+  when: tailscale_installed.rc != 0
 
 - name: Debug Tailscale auth key
   debug:
-    msg: "Tailscale auth key present: {{ 'yes' if ts_authkey else 'no' }}, Target hostname: {{ target_hostname }}"
+    msg: "Tailscale auth key present: {{ 'yes' if ts_authkey else 'no' }}, Target hostname: {{ target_hostname }}, Connected: {{ tailscale_connected }}"
 
-- name: Install and configure Tailscale (if not managed by Terraform)
-  when: tailscale_status.rc != 0
+- name: Install and configure Tailscale
+  when: not tailscale_connected and ts_authkey
   block:
     - name: Install Tailscale
       shell: "curl -fsSL https://tailscale.com/install.sh | sh"
@@ -177,7 +194,7 @@
         TS_AUTHKEY: "{{ ts_authkey }}"
       register: tailscale_result
       changed_when: "'Success' in tailscale_result.stdout or tailscale_result.rc == 0"
-      failed_when: false
+      failed_when: tailscale_result.rc != 0 and 'already logged in' not in tailscale_result.stderr
 
     - name: Debug Tailscale connection result
       debug:

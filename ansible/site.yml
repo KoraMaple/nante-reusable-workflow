@@ -25,20 +25,14 @@
     # In multi-instance mode, we need to map each host to its hostname
     # The workflow passes vm_hostnames_json as a map: {"node1": "patroni-prod-node1", "node2": "patroni-prod-node2"}
     # We'll use the inventory position to assign hostnames in order
-    - name: Build hostname list from JSON for multi-instance
+    - name: Assign hostname from multi-instance JSON
       set_fact:
-        hostname_list: "{{ (vm_hostnames_json | from_json).values() | list }}"
-      when:
-        - vm_hostnames_json is defined
-        - vm_hostnames_json != ''
-      run_once: true
-    
-    - name: Assign hostname to each host by inventory position
-      set_fact:
-        target_hostname: "{{ hostname_list[ansible_play_hosts.index(inventory_hostname)] }}"
+        target_hostname: "{{ ((vm_hostnames_json | from_json).values() | list)[ansible_play_hosts.index(inventory_hostname)] }}"
       when:
         - target_hostname is not defined or target_hostname == ''
-        - hostname_list is defined
+        - vm_hostnames_json is defined
+        - vm_hostnames_json != ''
+        - vm_hostnames_json != '{}'
     
     - name: Use inventory hostname as fallback
       set_fact:
@@ -47,7 +41,7 @@
     
     - name: Debug hostname assignment
       debug:
-        msg: "Host {{ inventory_hostname }} assigned hostname: {{ target_hostname }}"
+        msg: "Host {{ inventory_hostname }} (position {{ ansible_play_hosts.index(inventory_hostname) }}) assigned hostname: {{ target_hostname }}"
     
     # Run base_setup by default unless mgmt-docker is in the roles list
     # (mgmt-docker handles its own complete Alloy config and replaces base_setup)
