@@ -353,15 +353,16 @@ jobs:
               echo ""
               echo "=========================================="
               echo ""
-              echo "⏳ Waiting 45 seconds for you to configure TUN device..."
-              echo "   (Workflow will continue automatically)"
+              echo "⏳ Waiting 3 minutes for you to configure TUN device..."
+              echo "   (Workflow will continue automatically after 180 seconds)"
               echo ""
               
               # Wait without countdown to keep commands visible
-              sleep 45
+              sleep 180
               
               echo ""
               echo "✓ Continuing with workflow..."
+              echo "   Assuming TUN device has been configured."
             else
               echo "⚠️  Could not get LXC ID from Terraform output"
             fi
