@@ -19,8 +19,33 @@
     octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
     # octopus_roles can be passed as extra-vars from workflow (list format)
     # ansible_roles is a list of roles to apply (passed from workflow)
+    
   
   tasks:
+    # In multi-instance mode, derive hostname from vm_hostnames_json based on current host's IP
+    # In single-instance mode, use target_hostname passed from workflow
+    - name: Derive hostname for multi-instance deployments
+      set_fact:
+        target_hostname: |
+          {%- if vm_hostnames_json is defined and vm_hostnames_json != '' -%}
+            {%- set hostnames_map = vm_hostnames_json | from_json -%}
+            {%- set current_ip = ansible_host | default(inventory_hostname) -%}
+            {%- for key, hostname in hostnames_map.items() -%}
+              {{ hostname }}
+              {%- if not loop.last -%}{%- endif -%}
+              {%- if loop.first -%}{%- break -%}{%- endif -%}
+            {%- endfor -%}
+          {%- elif target_hostname is defined -%}
+            {{ target_hostname }}
+          {%- else -%}
+            {{ inventory_hostname }}
+          {%- endif -%}
+      when: target_hostname is not defined or target_hostname == ''
+    
+    - name: Debug hostname
+      debug:
+        msg: "Using hostname: {{ target_hostname }}"
+    
     # Run base_setup by default unless mgmt-docker is in the roles list
     # (mgmt-docker handles its own complete Alloy config and replaces base_setup)
     - name: Apply base_setup role

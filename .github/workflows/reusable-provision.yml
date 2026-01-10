@@ -317,19 +317,44 @@ jobs:
             echo "⚠️  No Tailscale auth key from Terraform - check OAuth credentials"
           fi
           
-          # Get VM hostname from Terraform for Ansible
-          export VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
-          if [ -n "$VM_HOSTNAME" ]; then
-            echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
-            echo "✓ VM hostname: $VM_HOSTNAME"
+          # Get VM hostnames from Terraform for Ansible
+          # In multi-instance mode, this is a JSON map; in single-instance mode, it's a single hostname
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance mode - get all hostnames and IPs as JSON
+            VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
+            VM_IPS_JSON=$(terraform output -json vm_target_ips 2>/dev/null || echo '{}')
+            echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
+            echo "VM_IPS_JSON=$VM_IPS_JSON" >> $GITHUB_ENV
+            echo "✓ Multi-instance hostnames retrieved"
+            echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
           else
-            echo "⚠️  No VM hostname found in Terraform output"
+            # Single-instance mode - get single hostname
+            VM_HOSTNAME=$(echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[0].value' 2>/dev/null || terraform output -raw vm_hostname 2>/dev/null || echo "")
+            if [ -n "$VM_HOSTNAME" ]; then
+              echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
+              echo "✓ VM hostname: $VM_HOSTNAME"
+            else
+              echo "⚠️  No VM hostname found in Terraform output"
+            fi
           fi
           EOF
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
-          echo "Waiting for ${{ inputs.resource_type }} at ${{ inputs.vm_target_ip }} to be reachable..."
+          # Determine target IPs based on deployment mode
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance mode - extract IPs from instances JSON
+            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ' ')
+            echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
+          else
+            # Single-instance mode
+            TARGET_IPS="${{ inputs.vm_target_ip }}"
+            echo "Single-instance mode: waiting for ${{ inputs.resource_type }} at $TARGET_IPS"
+          fi
+          
+          # Wait for each IP
+          for TARGET_IP in $TARGET_IPS; do
+            echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
           
           # Wait up to 3 minutes for the resource to respond to ping
           PING_SUCCESS=false
@@ -339,27 +364,27 @@ jobs:
             MAX_ATTEMPTS=12  # 1 minute for LXC
           fi
           
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            if ping -c 1 -W 2 ${{ inputs.vm_target_ip }} &>/dev/null; then
-              echo "✓ ${{ inputs.resource_type }} is responding to ping (attempt $i)"
-              PING_SUCCESS=true
-              break
-            fi
-            echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} not yet reachable, waiting 5s..."
-            sleep 5
-          done
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+              if ping -c 1 -W 2 $TARGET_IP &>/dev/null; then
+                echo "✓ ${{ inputs.resource_type }} at $TARGET_IP is responding to ping (attempt $i)"
+                PING_SUCCESS=true
+                break
+              fi
+              echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} at $TARGET_IP not yet reachable, waiting 5s..."
+              sleep 5
+            done
           
-          if [ "$PING_SUCCESS" = false ]; then
-            echo "❌ ERROR: ${{ inputs.resource_type }} did not respond to ping"
-            echo "Check that:"
-            echo "  1. Resource was created successfully in Proxmox"
-            if [ "${{ inputs.resource_type }}" = "vm" ]; then
-              echo "  2. Cloud-init completed (check VM console)"
+            if [ "$PING_SUCCESS" = false ]; then
+              echo "❌ ERROR: ${{ inputs.resource_type }} at $TARGET_IP did not respond to ping"
+              echo "Check that:"
+              echo "  1. Resource was created successfully in Proxmox"
+              if [ "${{ inputs.resource_type }}" = "vm" ]; then
+                echo "  2. Cloud-init completed (check VM console)"
+              fi
+              echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+              echo "  4. IP $TARGET_IP is not already in use"
+              exit 1
             fi
-            echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-            echo "  4. IP ${{ inputs.vm_target_ip }} is not already in use"
-            exit 1
-          fi
           
           # Wait for SSH port to be open
           # LXC containers (especially RHEL-based) may take longer to start SSH
@@ -371,43 +396,44 @@ jobs:
             echo "Waiting for SSH port 22..."
           fi
           
-          SSH_SUCCESS=false
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            if nc -z -w 2 ${{ inputs.vm_target_ip }} 22 2>/dev/null; then
-              echo "✓ SSH port is open (attempt $i)"
-              SSH_SUCCESS=true
-              break
-            fi
-            echo "Attempt $i/$MAX_ATTEMPTS: SSH not ready, waiting 5s..."
-            sleep 5
-          done
+            SSH_SUCCESS=false
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+              if nc -z -w 2 $TARGET_IP 22 2>/dev/null; then
+                echo "✓ SSH port at $TARGET_IP is open (attempt $i)"
+                SSH_SUCCESS=true
+                break
+              fi
+              echo "Attempt $i/$MAX_ATTEMPTS: SSH at $TARGET_IP not ready, waiting 5s..."
+              sleep 5
+            done
           
-          if [ "$SSH_SUCCESS" = false ]; then
-            if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-              echo "❌ ERROR: SSH port did not open after 3 minutes"
-              echo "Check that:"
-              echo "  1. LXC container started successfully in Proxmox"
-              echo "  2. SSH service is installed and enabled (systemctl status sshd)"
-              echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-              echo "  4. Firewall is not blocking port 22"
+            if [ "$SSH_SUCCESS" = false ]; then
+              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 3 minutes"
+                echo "Check that:"
+                echo "  1. LXC container started successfully in Proxmox"
+                echo "  2. SSH service is installed and enabled (systemctl status sshd)"
+                echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+                echo "  4. Firewall is not blocking port 22"
+              else
+                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 2 minutes"
+                echo "Check that:"
+                echo "  1. Cloud-init completed successfully"
+                echo "  2. SSH service is running"
+                echo "  3. Firewall is not blocking port 22"
+              fi
+              exit 1
+            fi
+            
+            # Additional wait for cloud-init to fully complete (VMs only)
+            if [ "${{ inputs.resource_type }}" = "vm" ]; then
+              echo "Waiting 15s for cloud-init to complete on $TARGET_IP..."
+              sleep 15
+              echo "✓ VM at $TARGET_IP is ready for Ansible configuration"
             else
-              echo "❌ ERROR: SSH port did not open after 2 minutes"
-              echo "Check that:"
-              echo "  1. Cloud-init completed successfully"
-              echo "  2. SSH service is running"
-              echo "  3. Firewall is not blocking port 22"
+              echo "✓ LXC container at $TARGET_IP is ready for Ansible configuration"
             fi
-            exit 1
-          fi
-          
-          # Additional wait for cloud-init to fully complete (VMs only)
-          if [ "${{ inputs.resource_type }}" = "vm" ]; then
-            echo "Waiting 15s for cloud-init to complete..."
-            sleep 15
-            echo "✓ VM is ready for Ansible configuration"
-          else
-            echo "✓ LXC container is ready for Ansible configuration"
-          fi
+          done
 
       - name: Run Ansible with Doppler
         run: |
@@ -423,9 +449,22 @@ jobs:
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
+          # Determine target IPs for Ansible
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance mode - build inventory from instances
+            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ',')
+            INVENTORY="${TARGET_IPS}"
+            echo "Multi-instance inventory: $INVENTORY"
+          else
+            # Single-instance mode
+            INVENTORY="${{ inputs.vm_target_ip }},"
+            echo "Single-instance inventory: $INVENTORY"
+          fi
+          
           # Clean up old SSH host keys to prevent conflicts
-          echo "Cleaning up old SSH host keys for ${{ inputs.vm_target_ip }}..."
-          ssh-keygen -R "${{ inputs.vm_target_ip }}" 2>/dev/null || true
+          for IP in $(echo "$INVENTORY" | tr ',' ' '); do
+            [ -n "$IP" ] && ssh-keygen -R "$IP" 2>/dev/null || true
+          done
           
           # Determine Ansible user based on resource type
           # VMs use cloud-init to create 'deploy' user
@@ -437,14 +476,14 @@ jobs:
           fi
           
           # Test connectivity
-          echo "Testing Ansible connectivity to ${{ inputs.vm_target_ip }} as $ANSIBLE_USER..."
-          if ! ansible all -i "${{ inputs.vm_target_ip }}," -m ping \
+          echo "Testing Ansible connectivity as $ANSIBLE_USER..."
+          if ! ansible all -i "$INVENTORY" -m ping \
             --user $ANSIBLE_USER \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10'; then
             echo "❌ ERROR: Ansible cannot connect to ${{ inputs.resource_type }}"
             exit 1
           fi
-          echo "✓ Ansible connectivity confirmed"
+          echo "✓ Ansible connectivity confirmed for all hosts"
           
           # Parse Octopus roles from comma-separated string to JSON array
           OCTOPUS_ROLES_JSON="[]"
@@ -480,12 +519,19 @@ jobs:
             echo "✓ Using Terraform-generated Tailscale auth key"
           fi
           
-          # Get VM hostname from environment (set in previous step)
-          VM_HOSTNAME="${{ env.VM_HOSTNAME }}"
-          if [ -z "$VM_HOSTNAME" ]; then
-            echo "⚠️  WARNING: VM_HOSTNAME not found in environment"
+          # Get VM hostnames from environment (set in previous step)
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance mode - hostnames are in JSON map
+            VM_HOSTNAMES_JSON='${{ env.VM_HOSTNAMES_JSON }}'
+            echo "✓ Using multi-instance hostnames from Terraform"
           else
-            echo "✓ Using VM hostname: $VM_HOSTNAME"
+            # Single-instance mode
+            VM_HOSTNAME="${{ env.VM_HOSTNAME }}"
+            if [ -z "$VM_HOSTNAME" ]; then
+              echo "⚠️  WARNING: VM_HOSTNAME not found in environment"
+            else
+              echo "✓ Using VM hostname: $VM_HOSTNAME"
+            fi
           fi
           
           # FreeIPA LDAP configuration (from Doppler)
@@ -513,18 +559,38 @@ jobs:
           
           echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
           
-          ansible-playbook -i "${{ inputs.vm_target_ip }}," site.yml \
-            --user $ANSIBLE_USER \
-            $BECOME_FLAG \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-            --extra-vars "target_hostname=$VM_HOSTNAME" \
-            --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-            --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
-            --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
-            --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
-            --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
-            --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
-            --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+          # Run Ansible playbook
+          # In multi-instance mode, Ansible will run against all hosts in inventory
+          # Each host will get its hostname from hostvars or we'll use a generic pattern
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance: pass hostnames as JSON for roles to use
+            ansible-playbook -i "$INVENTORY" site.yml \
+              --user $ANSIBLE_USER \
+              $BECOME_FLAG \
+              --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+              --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+              --extra-vars "vm_hostnames_json=$VM_HOSTNAMES_JSON" \
+              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+              --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+              --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+          else
+            # Single-instance: pass single hostname
+            ansible-playbook -i "$INVENTORY" site.yml \
+              --user $ANSIBLE_USER \
+              $BECOME_FLAG \
+              --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+              --extra-vars "target_hostname=$VM_HOSTNAME" \
+              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+              --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+              --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+              --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+          fi
           
           echo "✓ VM/LXC provisioned and configured"
           if [ -n "${{ inputs.ansible_roles }}" ]; then
