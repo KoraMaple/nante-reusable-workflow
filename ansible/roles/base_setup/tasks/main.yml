@@ -201,7 +201,7 @@
         var: tailscale_result
 
 - name: Verify Tailscale is connected
-  when: tailscale_status.rc != 0
+  when: tailscale_status is defined and tailscale_status.rc is defined and tailscale_status.rc != 0
   block:
     - name: Wait for Tailscale to be online
       command: tailscale status
@@ -218,7 +218,7 @@
 
 - name: Display Tailscale status
   debug:
-    msg: "Tailscale is {{ 'already configured' if tailscale_status.rc == 0 else 'newly configured' }}"
+    msg: "Tailscale is {{ 'already configured' if (tailscale_status is defined and tailscale_status.rc is defined and tailscale_status.rc == 0) else 'newly configured' }}"
 
 - name: Debug Observability Connection Vars
   debug:
