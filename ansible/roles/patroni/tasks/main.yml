@@ -48,6 +48,7 @@
       - psycopg2-binary
     state: present
     executable: pip3
+    extra_args: --break-system-packages
 
 - name: Create Patroni configuration directory
   ansible.builtin.file:

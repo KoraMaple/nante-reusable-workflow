@@ -20,6 +20,11 @@
     # octopus_roles can be passed as extra-vars from workflow (list format)
     # ansible_roles is a list of roles to apply (passed from workflow)
     
+    # Patroni/PostgreSQL passwords (from Doppler via environment)
+    patroni_superuser_password: "{{ lookup('env', 'PATRONI_SUPERUSER_PASSWORD') | default('changeme_superuser', true) }}"
+    patroni_admin_password: "{{ lookup('env', 'PATRONI_ADMIN_PASSWORD') | default('changeme_admin', true) }}"
+    patroni_replication_password: "{{ lookup('env', 'PATRONI_REPLICATION_PASSWORD') | default('changeme_replication', true) }}"
+    
   
   tasks:
     # Debug what we received from workflow
