@@ -84,18 +84,69 @@
     - reload systemd
     - restart patroni
 
+- name: Check etcd cluster health before starting Patroni
+  ansible.builtin.command: curl -s http://{{ item }}:2379/health
+  loop: "{{ etcd_cluster_endpoints.split(',') }}"
+  register: etcd_health
+  failed_when: false
+  changed_when: false
+
+- name: Display etcd health check results
+  debug:
+    msg: "etcd endpoint {{ item.item }} health: {{ item.stdout | default('FAILED') }}"
+  loop: "{{ etcd_health.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Verify at least one etcd node is healthy
+  assert:
+    that: etcd_health.results | selectattr('rc', 'equalto', 0) | list | length > 0
+    fail_msg: "No etcd nodes are accessible. Patroni requires etcd to be running."
+    success_msg: "At least one etcd node is accessible"
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
 - name: Enable and start Patroni service
   ansible.builtin.systemd:
     name: patroni
     enabled: yes
     state: started
-    daemon_reload: yes
+  register: patroni_start
 
-- name: Wait for Patroni to be ready
+- name: Check Patroni service status
+  ansible.builtin.systemd:
+    name: patroni
+  register: patroni_status
+
+- name: Display Patroni service status
+  debug:
+    msg:
+      - "Patroni service state: {{ patroni_status.status.ActiveState }}"
+      - "Patroni service enabled: {{ patroni_status.status.UnitFileState }}"
+
+- name: Wait for Patroni REST API to be ready
   ansible.builtin.uri:
     url: "http://{{ ansible_default_ipv4.address }}:8008/health"
     status_code: 200
   register: result
   until: result.status == 200
-  retries: 30
-  delay: 10
+  retries: 60
+  delay: 5
+  failed_when: false
+
+- name: Show Patroni logs if health check failed
+  ansible.builtin.command: journalctl -u patroni -n 50 --no-pager
+  register: patroni_logs
+  when: result.status != 200
+
+- name: Display Patroni logs on failure
+  debug:
+    msg: "{{ patroni_logs.stdout_lines }}"
+  when: result.status != 200
+
+- name: Fail if Patroni is not healthy
+  fail:
+    msg: "Patroni failed to start. Check logs above for details."
+  when: result.status != 200

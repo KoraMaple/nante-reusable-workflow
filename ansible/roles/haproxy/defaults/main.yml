@@ -1,0 +1,5 @@
+---
+# HAProxy defaults
+haproxy_stats_port: 7000
+haproxy_postgres_primary_port: 5000
+haproxy_postgres_replica_port: 5001
