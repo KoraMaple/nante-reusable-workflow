@@ -56,6 +56,24 @@
       - "HAProxy service state: {{ haproxy_status.status.ActiveState }}"
       - "HAProxy service enabled: {{ haproxy_status.status.UnitFileState }}"
 
+- name: Show HAProxy logs for debugging
+  ansible.builtin.command: journalctl -u haproxy -n 50 --no-pager
+  register: haproxy_logs_debug
+  changed_when: false
+
+- name: Display HAProxy logs
+  debug:
+    msg: "{{ haproxy_logs_debug.stdout_lines }}"
+
+- name: Show HAProxy configuration
+  ansible.builtin.command: cat /etc/haproxy/haproxy.cfg
+  register: haproxy_config
+  changed_when: false
+
+- name: Display HAProxy configuration
+  debug:
+    msg: "{{ haproxy_config.stdout_lines }}"
+
 - name: Verify HAProxy is listening on ports
   ansible.builtin.wait_for:
     port: "{{ verify_port }}"
