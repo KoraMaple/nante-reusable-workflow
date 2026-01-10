@@ -1,4 +1,28 @@
 ---
+- name: Install prerequisites for PostgreSQL repository
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: yes
+
+- name: Add PostgreSQL APT repository key
+  ansible.builtin.apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+
+- name: Add PostgreSQL APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+
+- name: Update apt cache after adding PostgreSQL repository
+  ansible.builtin.apt:
+    update_cache: yes
+
 - name: Install PostgreSQL and dependencies
   ansible.builtin.apt:
     name:
@@ -10,7 +34,6 @@
       - gcc
       - libpq-dev
     state: present
-    update_cache: yes
 
 - name: Stop and disable default PostgreSQL service
   ansible.builtin.systemd:
