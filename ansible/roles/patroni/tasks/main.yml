@@ -135,6 +135,12 @@
     fail_msg: "No etcd nodes are accessible. Patroni requires etcd to be running. Check etcd service status above."
     success_msg: "{{ healthy_etcd_count }} etcd node(s) accessible - proceeding with Patroni startup"
 
+- name: Stop existing Patroni service if running
+  ansible.builtin.systemd:
+    name: patroni
+    state: stopped
+  ignore_errors: yes
+
 - name: Reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: yes
@@ -160,8 +166,6 @@
   retries: 30
   delay: 10
   when: inventory_hostname != ansible_play_hosts[0]
-  delegate_to: "{{ ansible_play_hosts[0] }}"
-  run_once: true
 
 - name: Start Patroni on remaining nodes
   ansible.builtin.systemd:
