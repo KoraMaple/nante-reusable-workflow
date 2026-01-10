@@ -139,12 +139,40 @@
   ansible.builtin.systemd:
     daemon_reload: yes
 
-- name: Enable and start Patroni service
+- name: Enable Patroni service
   ansible.builtin.systemd:
     name: patroni
     enabled: yes
+
+- name: Start Patroni on first node only (to bootstrap cluster)
+  ansible.builtin.systemd:
+    name: patroni
     state: started
-  register: patroni_start
+  when: inventory_hostname == ansible_play_hosts[0]
+  register: patroni_start_first
+
+- name: Wait for first node to become leader
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[ansible_play_hosts[0]]['ansible_default_ipv4']['address'] }}:8008/leader"
+    status_code: 200
+  register: leader_check
+  until: leader_check.status == 200
+  retries: 30
+  delay: 10
+  when: inventory_hostname != ansible_play_hosts[0]
+  delegate_to: "{{ ansible_play_hosts[0] }}"
+  run_once: true
+
+- name: Start Patroni on remaining nodes
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  when: inventory_hostname != ansible_play_hosts[0]
+  register: patroni_start_others
+
+- name: Wait a moment for Patroni to stabilize
+  ansible.builtin.pause:
+    seconds: 5
 
 - name: Check Patroni service status
   ansible.builtin.systemd:
