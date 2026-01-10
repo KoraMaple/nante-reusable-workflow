@@ -85,7 +85,7 @@
     - restart patroni
 
 - name: Check etcd cluster health
-  ansible.builtin.shell: curl -sL http://{{ etcd_endpoint }}:2379/health
+  ansible.builtin.shell: curl -sL http://{{ etcd_endpoint }}/health
   loop: "{{ etcd_cluster_endpoints.split(',') }}"
   loop_control:
     loop_var: etcd_endpoint
@@ -93,14 +93,9 @@
   failed_when: false
   changed_when: false
 
-- name: Debug full etcd health result
-  debug:
-    var: etcd_health
-  run_once: true
-
 - name: Display etcd health check results
   debug:
-    msg: "etcd endpoint {{ health_result.etcd_endpoint }} - rc: {{ health_result.rc }} - stdout: '{{ health_result.stdout }}' - stderr: '{{ health_result.stderr }}'"
+    msg: "etcd endpoint {{ health_result.etcd_endpoint }} health: {{ 'OK' if (health_result.rc == 0 and '\"health\":\"true\"' in health_result.stdout) else 'FAILED' }} - Response: {{ health_result.stdout | default('no response') }}"
   loop: "{{ etcd_health.results }}"
   loop_control:
     loop_var: health_result
