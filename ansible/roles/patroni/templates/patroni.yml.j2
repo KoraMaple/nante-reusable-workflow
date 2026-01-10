@@ -6,7 +6,7 @@ restapi:
   listen: {{ ansible_default_ipv4.address }}:8008
   connect_address: {{ ansible_default_ipv4.address }}:8008
 
-etcd:
+etcd3:
   hosts: {{ etcd_cluster_endpoints }}
 
 bootstrap:
