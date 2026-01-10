@@ -84,30 +84,25 @@
     - reload systemd
     - restart patroni
 
-- name: Wait for etcd cluster to be accessible
-  ansible.builtin.uri:
-    url: "http://{{ etcd_endpoint }}:2379/health"
-    status_code: 200
+- name: Check etcd cluster health
+  ansible.builtin.command: curl -sf http://{{ etcd_endpoint }}:2379/health
   loop: "{{ etcd_cluster_endpoints.split(',') }}"
   loop_control:
     loop_var: etcd_endpoint
   register: etcd_health
-  until: etcd_health.status == 200
-  retries: 15
-  delay: 4
   failed_when: false
   changed_when: false
 
 - name: Display etcd health check results
   debug:
-    msg: "etcd endpoint {{ item.etcd_endpoint }} health: {{ 'OK' if item.status == 200 else 'FAILED' }}"
+    msg: "etcd endpoint {{ item.etcd_endpoint }} health: {{ 'OK (rc=' + (item.rc | string) + ')' if item.rc == 0 else 'FAILED (rc=' + (item.rc | string) + ')' }} - Response: {{ item.stdout | default('no response') }}"
   loop: "{{ etcd_health.results }}"
   loop_control:
     label: "{{ item.etcd_endpoint }}"
 
 - name: Count healthy etcd nodes
   set_fact:
-    healthy_etcd_count: "{{ etcd_health.results | selectattr('status', 'equalto', 200) | list | length }}"
+    healthy_etcd_count: "{{ etcd_health.results | selectattr('rc', 'equalto', 0) | list | length }}"
 
 - name: Display etcd cluster status
   debug:
