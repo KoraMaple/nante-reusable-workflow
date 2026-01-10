@@ -9,9 +9,13 @@
         --extra-vars "patroni_backends=[{'name':'patroni-node1','ip':'192.168.20.61'},{'name':'patroni-node2','ip':'192.168.20.62'},{'name':'patroni-node3','ip':'192.168.20.63'}]"
   when: patroni_backends is not defined or patroni_backends | length == 0
 
+- name: Parse patroni_backends if it's a JSON string
+  set_fact:
+    patroni_backends_parsed: "{{ patroni_backends if patroni_backends is not string else (patroni_backends | from_json) }}"
+
 - name: Display Patroni backends configuration
   debug:
-    msg: "Configuring HAProxy with {{ patroni_backends | length }} Patroni backend(s): {{ patroni_backends | map(attribute='ip') | list | join(', ') }}"
+    msg: "Configuring HAProxy with {{ patroni_backends_parsed | length }} Patroni backend(s): {{ patroni_backends_parsed | map(attribute='ip') | list | join(', ') }}"
 
 - name: Check if required ports are available
   ansible.builtin.wait_for:

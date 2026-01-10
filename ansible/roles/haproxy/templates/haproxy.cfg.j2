@@ -34,7 +34,7 @@ listen postgres_primary
     option httpchk GET /
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-{% for backend in patroni_backends %}
+{% for backend in patroni_backends_parsed %}
     server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
 {% endfor %}
 
@@ -45,6 +45,6 @@ listen postgres_replicas
     option httpchk GET /replica
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-{% for backend in patroni_backends %}
+{% for backend in patroni_backends_parsed %}
     server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
 {% endfor %}
