@@ -42,19 +42,24 @@ resource "proxmox_lxc" "container" {
   # Container features
   features {
     nesting = var.lxc_nesting              # Required for Docker in LXC
-    keyctl  = var.lxc_unprivileged ? true : false  # Required for Tailscale (only works with unprivileged)
+    # Note: keyctl is only needed for unprivileged containers with Tailscale
+    # For privileged containers, Tailscale works without keyctl
+    # keyctl requires root@pam permissions to set, so we omit it for privileged containers
   }
   
   # Start on boot
   onboot = true
-  start  = false  # Don't auto-start - we need to configure TUN first
+  start  = true  # Auto-start after creation
   
-  # NOTE: TUN device must be manually configured for Tailscale to work
+  # NOTE: For unprivileged containers with Tailscale, TUN device must be manually configured
   # After Terraform creates the container, run these commands on the Proxmox host:
   #   pct stop <VMID>
   #   echo 'lxc.cgroup2.devices.allow: c 10:200 rwm' >> /etc/pve/lxc/<VMID>.conf
   #   echo 'lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' >> /etc/pve/lxc/<VMID>.conf
   #   pct start <VMID>
+  #
+  # For privileged containers (lxc_unprivileged=false), TUN device works automatically.
+  # No manual configuration needed.
   
   # Lifecycle management
   lifecycle {
