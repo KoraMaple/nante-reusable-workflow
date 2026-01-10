@@ -704,10 +704,9 @@ jobs:
           echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
           
           # Parse ansible_extra_vars if provided
-          EXTRA_VARS_FLAG=""
           if [ -n "${{ inputs.ansible_extra_vars }}" ]; then
             echo "✓ Additional Ansible extra vars provided"
-            EXTRA_VARS_FLAG="--extra-vars '${{ inputs.ansible_extra_vars }}'"
+            echo "DEBUG: ansible_extra_vars = ${{ inputs.ansible_extra_vars }}"
           fi
           
           # Run Ansible playbook
@@ -718,34 +717,64 @@ jobs:
           
           if [ -n "${{ inputs.instances }}" ]; then
             # Multi-instance: pass hostnames as JSON for roles to use
-            TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
-              --user $ANSIBLE_USER \
-              $BECOME_FLAG \
-              --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-              --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
-              --extra-vars "vm_hostnames_json=$VM_HOSTNAMES_JSON" \
-              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
-              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
-              --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
-              --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
-              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
-              $EXTRA_VARS_FLAG
+            if [ -n "${{ inputs.ansible_extra_vars }}" ]; then
+              TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
+                --user $ANSIBLE_USER \
+                $BECOME_FLAG \
+                --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+                --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+                --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+                --extra-vars "vm_hostnames_json=$VM_HOSTNAMES_JSON" \
+                --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+                --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+                --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+                --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+                --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
+                --extra-vars "${{ inputs.ansible_extra_vars }}"
+            else
+              TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
+                --user $ANSIBLE_USER \
+                $BECOME_FLAG \
+                --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+                --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+                --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+                --extra-vars "vm_hostnames_json=$VM_HOSTNAMES_JSON" \
+                --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+                --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+                --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+                --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+                --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+            fi
           else
             # Single-instance: pass single hostname
-            TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
-              --user $ANSIBLE_USER \
-              $BECOME_FLAG \
-              --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-              --extra-vars "target_hostname=$VM_HOSTNAME" \
-              --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
-              --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
-              --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
-              --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
-              --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
-              --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
-              --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
-              $EXTRA_VARS_FLAG
+            if [ -n "${{ inputs.ansible_extra_vars }}" ]; then
+              TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
+                --user $ANSIBLE_USER \
+                $BECOME_FLAG \
+                --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+                --extra-vars "target_hostname=$VM_HOSTNAME" \
+                --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+                --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+                --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+                --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+                --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+                --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+                --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}" \
+                --extra-vars "${{ inputs.ansible_extra_vars }}"
+            else
+              TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
+                --user $ANSIBLE_USER \
+                $BECOME_FLAG \
+                --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+                --extra-vars "target_hostname=$VM_HOSTNAME" \
+                --extra-vars "vlan_tag=${{ inputs.vlan_tag }}" \
+                --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+                --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+                --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON" \
+                --extra-vars "skip_octopus=${{ inputs.skip_octopus }}" \
+                --extra-vars "freeipa_server_ip=${FREEIPA_SERVER_IP:-}" \
+                --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
+            fi
           fi
           
           echo "✓ VM/LXC provisioned and configured"
