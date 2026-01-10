@@ -1,4 +1,18 @@
 ---
+- name: Validate Patroni backends configuration
+  fail:
+    msg: |
+      patroni_backends variable is not defined or empty.
+      You must pass Patroni backend server IPs when deploying HAProxy.
+      
+      Example:
+        --extra-vars "patroni_backends=[{'name':'patroni-node1','ip':'192.168.20.61'},{'name':'patroni-node2','ip':'192.168.20.62'},{'name':'patroni-node3','ip':'192.168.20.63'}]"
+  when: patroni_backends is not defined or patroni_backends | length == 0
+
+- name: Display Patroni backends configuration
+  debug:
+    msg: "Configuring HAProxy with {{ patroni_backends | length }} Patroni backend(s): {{ patroni_backends | map(attribute='ip') | list | join(', ') }}"
+
 - name: Check if required ports are available
   ansible.builtin.wait_for:
     port: "{{ haproxy_port }}"

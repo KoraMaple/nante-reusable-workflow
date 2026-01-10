@@ -34,8 +34,8 @@ listen postgres_primary
     option httpchk GET /
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-{% for host in ansible_play_hosts %}
-    server {{ hostvars[host]['target_hostname'] }} {{ host }}:5432 maxconn 100 check port 8008
+{% for backend in patroni_backends %}
+    server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
 {% endfor %}
 
 # PostgreSQL Replicas (read-only)
@@ -45,6 +45,6 @@ listen postgres_replicas
     option httpchk GET /replica
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-{% for host in ansible_play_hosts %}
-    server {{ hostvars[host]['target_hostname'] }} {{ host }}:5432 maxconn 100 check port 8008
+{% for backend in patroni_backends %}
+    server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
 {% endfor %}
