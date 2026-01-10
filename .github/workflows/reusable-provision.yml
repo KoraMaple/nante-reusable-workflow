@@ -185,17 +185,76 @@ jobs:
           terraform workspace select ${{ inputs.app_name }} || terraform workspace new ${{ inputs.app_name }}
           
           # Check if VM already exists (for retry scenarios)
-          if terraform state list | grep -q "proxmox_vm_qemu.generic_vm"; then
-            echo "⚠️  VM already exists in Terraform state"
-            echo "This is likely a retry after a previous failure"
+          if terraform state list | grep -q "proxmox_vm_qemu.generic_vm" || terraform state list | grep -q "proxmox_lxc.container"; then
+            echo "⚠️  Resources already exist in Terraform state"
+            echo "This is likely a retry after a previous failure or reconfiguration of existing VMs"
             echo "Skipping Terraform apply, proceeding to Ansible configuration..."
             
-            # Still need to ensure Tailscale key exists
-            if ! terraform state list | grep -q "tailscale_tailnet_key.vm_auth_key"; then
-              echo "Creating Tailscale auth key..."
-              terraform apply -target=tailscale_tailnet_key.vm_auth_key -auto-approve \
-                -var="app_name=${{ inputs.app_name }}" \
-                -var="environment=${{ inputs.environment }}"
+            # Extract outputs even though we're not running apply
+            # This is critical for getting hostnames and Tailscale auth key
+            echo "Extracting Terraform outputs for existing resources..."
+            
+            # Try to get Tailscale auth key from Terraform output first
+            TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
+            
+            # If no key in Terraform, generate one via OAuth
+            if [ -z "$TAILSCALE_AUTH_KEY" ]; then
+              echo "No Tailscale auth key in state, generating via OAuth..."
+              mkdir -p /tmp/tailscale-provision-$$
+              cd /tmp/tailscale-provision-$$
+              
+              cat > main.tf <<'TSEOF'
+          terraform {
+            required_providers {
+              tailscale = {
+                source  = "tailscale/tailscale"
+                version = "~> 0.17"
+              }
+            }
+          }
+          
+          provider "tailscale" {}
+          
+          resource "tailscale_tailnet_key" "provision_key" {
+            reusable      = true
+            ephemeral     = false
+            preauthorized = true
+            expiry        = 7776000
+            description   = "Provision key for ${{ inputs.app_name }}"
+          }
+          
+          output "auth_key" {
+            value     = tailscale_tailnet_key.provision_key.key
+            sensitive = true
+          }
+          TSEOF
+              
+              terraform init -no-color > /dev/null 2>&1
+              if terraform apply -auto-approve -no-color > /dev/null 2>&1; then
+                TAILSCALE_AUTH_KEY=$(terraform output -raw auth_key 2>/dev/null || echo "")
+                echo "✓ Generated Tailscale auth key via OAuth"
+              fi
+              cd -
+              rm -rf /tmp/tailscale-provision-$$
+            fi
+            
+            # Export auth key
+            if [ -n "$TAILSCALE_AUTH_KEY" ]; then
+              echo "TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY" >> $GITHUB_ENV
+              echo "✓ Tailscale auth key available"
+            fi
+            
+            # Get VM hostnames from Terraform outputs
+            if [ -n "${{ inputs.instances }}" ]; then
+              VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
+              echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
+              echo "✓ Multi-instance hostnames: $VM_HOSTNAMES_JSON"
+            else
+              VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+              if [ -n "$VM_HOSTNAME" ]; then
+                echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
+                echo "✓ VM hostname: $VM_HOSTNAME"
+              fi
             fi
             
             # Skip to Ansible
@@ -566,6 +625,7 @@ jobs:
           echo "Running Ansible playbook as $ANSIBLE_USER..."
           
           # Set TS_AUTHKEY for Ansible from environment (passed from previous step)
+          echo "DEBUG: TAILSCALE_AUTH_KEY from env: ${TAILSCALE_AUTH_KEY:0:20}..." # Show first 20 chars
           if [ -z "$TAILSCALE_AUTH_KEY" ]; then
             echo "⚠️  WARNING: No Tailscale auth key available. Tailscale will not be configured."
             echo "   Check that TAILSCALE_OAUTH_CLIENT_ID and TAILSCALE_OAUTH_CLIENT_SECRET are set in Doppler"
@@ -573,6 +633,7 @@ jobs:
           else
             export TS_AUTHKEY="$TAILSCALE_AUTH_KEY"
             echo "✓ Using Tailscale auth key for configuration"
+            echo "DEBUG: TS_AUTHKEY exported: ${TS_AUTHKEY:0:20}..."
           fi
           
           # Get VM hostnames from environment (set in previous step)
@@ -580,6 +641,7 @@ jobs:
             # Multi-instance mode - hostnames are in JSON map
             VM_HOSTNAMES_JSON='${{ env.VM_HOSTNAMES_JSON }}'
             echo "✓ Using multi-instance hostnames from Terraform"
+            echo "DEBUG: VM_HOSTNAMES_JSON = $VM_HOSTNAMES_JSON"
           else
             # Single-instance mode
             VM_HOSTNAME="${{ env.VM_HOSTNAME }}"
