@@ -75,23 +75,27 @@
         - freeipa_admin_password is defined
     
     # Apply all roles from ansible_roles list
-    # Special handling for etcd role which needs cluster topology
-    - name: Build etcd cluster configuration
+    # Special handling for etcd and patroni roles which need cluster topology
+    - name: Build cluster configuration for etcd and patroni
       set_fact:
         etcd_node_name: "{{ target_hostname }}"
         etcd_initial_cluster: "{% for host in ansible_play_hosts %}{{ hostvars[host]['target_hostname'] }}=http://{{ host }}:2380{% if not loop.last %},{% endif %}{% endfor %}"
+        etcd_cluster_endpoints: "{% for host in ansible_play_hosts %}{{ host }}:2379{% if not loop.last %},{% endif %}{% endfor %}"
+        patroni_node_name: "{{ target_hostname }}"
       when:
         - ansible_roles is defined
-        - "'etcd' in ansible_roles"
+        - "'etcd' in ansible_roles or 'patroni' in ansible_roles"
     
-    - name: Debug etcd configuration
+    - name: Debug cluster configuration
       debug:
         msg:
-          - "Node name: {{ etcd_node_name | default('NOT SET') }}"
-          - "Initial cluster: {{ etcd_initial_cluster | default('NOT SET') }}"
+          - "etcd node name: {{ etcd_node_name | default('NOT SET') }}"
+          - "etcd initial cluster: {{ etcd_initial_cluster | default('NOT SET') }}"
+          - "etcd cluster endpoints: {{ etcd_cluster_endpoints | default('NOT SET') }}"
+          - "patroni node name: {{ patroni_node_name | default('NOT SET') }}"
       when:
         - ansible_roles is defined
-        - "'etcd' in ansible_roles"
+        - "'etcd' in ansible_roles or 'patroni' in ansible_roles"
     
     - name: Apply custom roles
       include_role:
