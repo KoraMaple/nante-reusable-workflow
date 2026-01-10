@@ -194,6 +194,9 @@ jobs:
             # This is critical for getting hostnames and Tailscale auth key
             echo "Extracting Terraform outputs for existing resources..."
             
+            # Ensure we're in terraform directory
+            cd terraform
+            
             # Try to get Tailscale auth key from Terraform output first
             TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
             
@@ -244,7 +247,11 @@ jobs:
               echo "✓ Tailscale auth key available"
             fi
             
+            # Return to terraform directory if we went to temp dir for Tailscale
+            cd $GITHUB_WORKSPACE/terraform
+            
             # Get VM/LXC hostnames from Terraform outputs
+            echo "DEBUG: Extracting hostname for resource_type=${{ inputs.resource_type }}"
             if [ -n "${{ inputs.instances }}" ]; then
               VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
               echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
@@ -252,13 +259,19 @@ jobs:
             else
               # Single-instance mode - check for VM or LXC hostname
               if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                echo "DEBUG: Extracting lxc_hostname..."
                 VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
+                echo "DEBUG: lxc_hostname result: '$VM_HOSTNAME'"
               else
+                echo "DEBUG: Extracting vm_hostname..."
                 VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+                echo "DEBUG: vm_hostname result: '$VM_HOSTNAME'"
               fi
               if [ -n "$VM_HOSTNAME" ]; then
                 echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
                 echo "✓ Hostname: $VM_HOSTNAME"
+              else
+                echo "⚠️  WARNING: Hostname is empty after extraction"
               fi
             fi
             
