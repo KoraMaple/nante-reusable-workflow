@@ -40,6 +40,7 @@
     name: postgresql
     state: stopped
     enabled: no
+  ignore_errors: yes
 
 - name: Install Patroni and dependencies via pip
   ansible.builtin.pip:
@@ -58,7 +59,12 @@
     group: postgres
     mode: '0755'
 
-- name: Create Patroni data directory
+- name: Remove existing PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ patroni_data_dir }}"
+    state: absent
+
+- name: Create empty Patroni data directory
   ansible.builtin.file:
     path: "{{ patroni_data_dir }}"
     state: directory
