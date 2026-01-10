@@ -16,10 +16,11 @@
 
 - name: Display port availability
   debug:
-    msg: "Port {{ item.item }} is {{ 'available' if item.failed else 'in use' }}"
+    msg: "Port {{ port_result.haproxy_port }} is {{ 'available' if port_result.failed else 'in use' }}"
   loop: "{{ port_check.results }}"
   loop_control:
-    label: "Port {{ item.item }}"
+    loop_var: port_result
+    label: "Port {{ port_result.haproxy_port }}"
 
 - name: Install HAProxy
   ansible.builtin.apt:
