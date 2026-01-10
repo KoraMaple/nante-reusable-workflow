@@ -139,5 +139,5 @@
       - "- SSH to this server"
       - "- Use sudo without password"
       - ""
-      - "Test: ssh username@{{ ansible_default_ipv4.address }}"
+      - "Test: ssh username@{{ target_hostname }}"
       - "==================================================================="
