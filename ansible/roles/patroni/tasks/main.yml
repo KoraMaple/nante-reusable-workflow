@@ -141,6 +141,14 @@
     state: stopped
   ignore_errors: yes
 
+- name: Clear existing cluster state from etcd DCS
+  ansible.builtin.shell: |
+    ETCDCTL_API=3 etcdctl --endpoints="{{ etcd_cluster_endpoints }}" del --prefix "{{ patroni_namespace }}{{ patroni_scope }}/"
+  run_once: true
+  failed_when: false
+  changed_when: false
+  when: inventory_hostname == ansible_play_hosts[0]
+
 - name: Reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: yes
