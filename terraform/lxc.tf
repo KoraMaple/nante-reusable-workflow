@@ -99,12 +99,12 @@ output "lxc_hostnames" {
 
 # Output single container ID (for single-instance mode)
 output "lxc_id" {
-  value = var.resource_type == "lxc" && var.instance_count == 1 ? values(proxmox_lxc.container)[0].vmid : null
+  value = var.resource_type == "lxc" && length(proxmox_lxc.container) > 0 ? values(proxmox_lxc.container)[0].vmid : null
   description = "Single LXC container ID (only for single-instance deployments)"
 }
 
 # Output single container hostname (for single-instance mode)
 output "lxc_hostname" {
-  value = var.resource_type == "lxc" && var.instance_count == 1 ? values(local.vm_hostnames)[0] : ""
+  value = var.resource_type == "lxc" && length(local.vm_hostnames) > 0 ? values(local.vm_hostnames)[0] : ""
   description = "Single LXC container hostname (only for single-instance deployments)"
 }
