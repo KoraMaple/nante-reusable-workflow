@@ -194,9 +194,7 @@ jobs:
             # This is critical for getting hostnames and Tailscale auth key
             echo "Extracting Terraform outputs for existing resources..."
             
-            # Ensure we're in terraform directory
-            cd terraform
-            
+            # We're already in terraform directory from line 171
             # Try to get Tailscale auth key from Terraform output first
             TAILSCALE_AUTH_KEY=$(terraform output -raw tailscale_auth_key 2>/dev/null || echo "")
             
@@ -248,7 +246,7 @@ jobs:
             fi
             
             # Return to terraform directory if we went to temp dir for Tailscale
-            cd $GITHUB_WORKSPACE/terraform
+            cd $GITHUB_WORKSPACE/terraform/
             
             # Get VM/LXC hostnames from Terraform outputs
             echo "DEBUG: Extracting hostname for resource_type=${{ inputs.resource_type }}"
