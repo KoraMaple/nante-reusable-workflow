@@ -618,9 +618,12 @@ jobs:
           # Run Ansible playbook
           # In multi-instance mode, Ansible will run against all hosts in inventory
           # Each host will get its hostname from hostvars or we'll use a generic pattern
+          # Export TS_AUTHKEY so it's available to ansible-playbook subprocess
+          export TS_AUTHKEY
+          
           if [ -n "${{ inputs.instances }}" ]; then
             # Multi-instance: pass hostnames as JSON for roles to use
-            ansible-playbook -i "$INVENTORY" site.yml \
+            TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
               --user $ANSIBLE_USER \
               $BECOME_FLAG \
               --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
@@ -634,7 +637,7 @@ jobs:
               --extra-vars "freeipa_admin_password=${FREEIPA_ADMIN_PASSWORD:-}"
           else
             # Single-instance: pass single hostname
-            ansible-playbook -i "$INVENTORY" site.yml \
+            TS_AUTHKEY="$TS_AUTHKEY" ansible-playbook -i "$INVENTORY" site.yml \
               --user $ANSIBLE_USER \
               $BECOME_FLAG \
               --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
