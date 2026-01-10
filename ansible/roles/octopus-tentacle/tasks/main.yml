@@ -62,13 +62,21 @@
     mode: '0755'
   when: tentacle_verify.stat.exists
 
+- name: Check if Tentacle instance exists
+  command: >
+    {{ tentacle_install_dir }}/Tentacle show-configuration
+    --instance "{{ tentacle_instance_name }}"
+  register: instance_check
+  failed_when: false
+  changed_when: false
+
 - name: Create Tentacle instance
   command: >
     {{ tentacle_install_dir }}/Tentacle create-instance
     --instance "{{ tentacle_instance_name }}"
     --config "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
-  args:
-    creates: "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
+  when: instance_check.rc != 0
+  register: instance_create
 
 - name: Generate Tentacle certificate
   command: >
@@ -77,6 +85,7 @@
     --if-blank
   register: cert_result
   changed_when: "'A new certificate has been generated' in cert_result.stdout"
+  failed_when: cert_result.rc != 0 and 'already has a certificate' not in cert_result.stderr
 
 - name: Configure Tentacle
   command: >
@@ -86,6 +95,8 @@
     --app "{{ tentacle_app_dir }}"
     --port "{{ tentacle_port }}"
     --noListen "{{ 'True' if tentacle_communication_mode == 'Polling' else 'False' }}"
+  register: tentacle_configure
+  changed_when: tentacle_configure.rc == 0
 
 - name: Debug Octopus registration variables
   debug:
