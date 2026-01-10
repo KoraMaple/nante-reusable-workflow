@@ -489,6 +489,8 @@ jobs:
           done
 
       - name: Run Ansible with Doppler
+        env:
+          TAILSCALE_AUTH_KEY: ${{ env.TAILSCALE_AUTH_KEY }}
         run: |
           doppler run -- bash <<'EOF'
           set -e
@@ -563,13 +565,14 @@ jobs:
           
           echo "Running Ansible playbook as $ANSIBLE_USER..."
           
-          # Set TS_AUTHKEY for Ansible from Terraform-generated key
+          # Set TS_AUTHKEY for Ansible from environment (passed from previous step)
           if [ -z "$TAILSCALE_AUTH_KEY" ]; then
-            echo "⚠️  WARNING: No Tailscale auth key from Terraform. Tailscale will not be configured."
+            echo "⚠️  WARNING: No Tailscale auth key available. Tailscale will not be configured."
+            echo "   Check that TAILSCALE_OAUTH_CLIENT_ID and TAILSCALE_OAUTH_CLIENT_SECRET are set in Doppler"
             export TS_AUTHKEY=""
           else
             export TS_AUTHKEY="$TAILSCALE_AUTH_KEY"
-            echo "✓ Using Terraform-generated Tailscale auth key"
+            echo "✓ Using Tailscale auth key for configuration"
           fi
           
           # Get VM hostnames from environment (set in previous step)

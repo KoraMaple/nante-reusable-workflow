@@ -22,29 +22,32 @@
     
   
   tasks:
-    # In multi-instance mode, derive hostname from vm_hostnames_json based on current host's IP
-    # In single-instance mode, use target_hostname passed from workflow
-    - name: Derive hostname for multi-instance deployments
+    # In multi-instance mode, we need to map each host to its hostname
+    # The workflow passes vm_hostnames_json as a map: {"node1": "patroni-prod-node1", "node2": "patroni-prod-node2"}
+    # We'll use the inventory position to assign hostnames in order
+    - name: Build hostname list from JSON for multi-instance
       set_fact:
-        target_hostname: |
-          {%- if vm_hostnames_json is defined and vm_hostnames_json != '' -%}
-            {%- set hostnames_map = vm_hostnames_json | from_json -%}
-            {%- set current_ip = ansible_host | default(inventory_hostname) -%}
-            {%- for key, hostname in hostnames_map.items() -%}
-              {{ hostname }}
-              {%- if not loop.last -%}{%- endif -%}
-              {%- if loop.first -%}{%- break -%}{%- endif -%}
-            {%- endfor -%}
-          {%- elif target_hostname is defined -%}
-            {{ target_hostname }}
-          {%- else -%}
-            {{ inventory_hostname }}
-          {%- endif -%}
+        hostname_list: "{{ (vm_hostnames_json | from_json).values() | list }}"
+      when:
+        - vm_hostnames_json is defined
+        - vm_hostnames_json != ''
+      run_once: true
+    
+    - name: Assign hostname to each host by inventory position
+      set_fact:
+        target_hostname: "{{ hostname_list[ansible_play_hosts.index(inventory_hostname)] }}"
+      when:
+        - target_hostname is not defined or target_hostname == ''
+        - hostname_list is defined
+    
+    - name: Use inventory hostname as fallback
+      set_fact:
+        target_hostname: "{{ inventory_hostname }}"
       when: target_hostname is not defined or target_hostname == ''
     
-    - name: Debug hostname
+    - name: Debug hostname assignment
       debug:
-        msg: "Using hostname: {{ target_hostname }}"
+        msg: "Host {{ inventory_hostname }} assigned hostname: {{ target_hostname }}"
     
     # Run base_setup by default unless mgmt-docker is in the roles list
     # (mgmt-docker handles its own complete Alloy config and replaces base_setup)
