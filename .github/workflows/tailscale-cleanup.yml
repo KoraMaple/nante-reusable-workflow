@@ -31,6 +31,10 @@ on:
         default: 'tag:ci'
         type: string
 
+# Limit permissions for security
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
