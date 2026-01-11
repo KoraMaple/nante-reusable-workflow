@@ -41,8 +41,58 @@ permissions:
   contents: read
 
 jobs:
+  check-runner-access:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.select-runner.outputs.runner }}
+    steps:
+      - name: Select runner based on org membership
+        id: select-runner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requestedRunner = '${{ inputs.runner_type || 'github-hosted' }}';
+            
+            // Default to github-hosted
+            let runner = 'ubuntu-latest';
+            
+            // Block fork PRs from self-hosted
+            if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
+              const prRepo = context.payload.pull_request?.head?.repo?.full_name;
+              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+                core.warning('Fork PRs use GitHub-hosted runners only');
+                core.setOutput('runner', 'ubuntu-latest');
+                return;
+              }
+            }
+            
+            // If self-hosted requested, verify org membership
+            if (requestedRunner === 'self-hosted') {
+              if (context.repo.owner !== 'KoraMaple') {
+                core.warning('Self-hosted only available for KoraMaple org repos');
+                core.setOutput('runner', 'ubuntu-latest');
+                return;
+              }
+              
+              try {
+                const { data } = await github.rest.orgs.getMembershipForUser({
+                  org: 'KoraMaple',
+                  username: context.actor
+                });
+                if (data.state === 'active') {
+                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
+                  runner = 'self-hosted';
+                }
+              } catch (e) {
+                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
+              }
+            }
+            
+            core.setOutput('runner', runner);
+
   cleanup:
-    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
+    needs: check-runner-access
+    runs-on: ${{ needs.check-runner-access.outputs.runner }}
     # Prevent fork PRs from running infrastructure operations - maintainers must explicitly trigger
     if: |
       github.event_name != 'pull_request' ||
@@ -51,7 +101,7 @@ jobs:
     steps:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
-        if: inputs.runner_type == 'github-hosted'
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
         uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
