@@ -1,5 +1,50 @@
 # Nante-reusable-workflows
 
+## 🚨 Security Notice for Public Use
+
+**This repository is now PUBLIC and safe to fork!** 🎉
+
+- ✅ **Safe to fork** - Uses GitHub-hosted runners with Tailscale by default
+- ✅ **Open source friendly** - Contributors can run full CI/CD
+- ✅ **No secrets in code** - All secrets via Doppler
+- ⚠️ **For self-hosted runners** - Only use in **PRIVATE repositories**
+
+### Before Using
+
+1. **Read [`.github/SECURITY.md`](.github/SECURITY.md)** - Critical security information
+2. **Configure Doppler secrets** - See [`docs/DOPPLER_SECRETS.md`](docs/DOPPLER_SECRETS.md)
+3. **Set up Tailscale** - Required for GitHub-hosted runners to access internal infrastructure
+4. **Review workflows** - Understand what each workflow does
+
+### Quick Start
+
+```yaml
+# Safe default configuration (GitHub-hosted + Tailscale)
+jobs:
+  provision:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main
+    with:
+      app_name: "my-app"
+      vlan_tag: "20"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.50
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+```
+
+For private repositories with self-hosted runners:
+```yaml
+with:
+  runner_type: "self-hosted"  # ⚠️ Only in private repos
+  # ... other inputs
+```
+
+---
+
 Modular CI/CD pipeline for self-hosted infrastructure provisioning, configuration, and application deployment on Proxmox.
 
 ## Overview

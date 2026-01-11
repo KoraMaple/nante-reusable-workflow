@@ -1,3 +1,8 @@
+# ⚠️ SECURITY NOTICE:
+# This workflow defaults to GitHub-hosted runners for safety in public repositories.
+# Only use runner_type: "self-hosted" in PRIVATE repositories with trusted contributors.
+# Fork PRs will require manual approval before running infrastructure operations.
+
 name: "Reusable VM/CT Provisioning"
 
 on:
@@ -114,14 +119,19 @@ on:
       # Runner configuration
       runner_type:
         type: string
-        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access)'
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access). ⚠️ Use self-hosted ONLY in private repositories.'
         required: false
-        default: 'self-hosted'
+        default: 'github-hosted'
       tailscale_tags:
         type: string
         description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
         required: false
         default: 'tag:ci'
+      minio_endpoint:
+        type: string
+        description: 'MinIO S3 endpoint for Terraform state backend. If not provided, uses MINIO_ENDPOINT from Doppler or defaults to internal network.'
+        required: false
+        default: ''
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -140,6 +150,10 @@ on:
 jobs:
   provision:
     runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
+    # Prevent fork PRs from running infrastructure operations - maintainers must explicitly trigger
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     
     steps:
       # Connect to Tailscale for GitHub-hosted runners
@@ -192,12 +206,18 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
-          # Mask sensitive values to prevent log exposure
-          if [ -n "$MINIO_ROOT_PASSWORD" ]; then echo "::add-mask::$MINIO_ROOT_PASSWORD"; fi
-          if [ -n "$PROXMOX_TOKEN_SECRET" ]; then echo "::add-mask::$PROXMOX_TOKEN_SECRET"; fi
-          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
-          if [ -n "$FREEIPA_ADMIN_PASSWORD" ]; then echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"; fi
-          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
+          # Mask all sensitive values to prevent log exposure
+          [ -n "$MINIO_ROOT_PASSWORD" ] && echo "::add-mask::$MINIO_ROOT_PASSWORD"
+          [ -n "$PROXMOX_TOKEN_SECRET" ] && echo "::add-mask::$PROXMOX_TOKEN_SECRET"
+          [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ] && echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"
+          [ -n "$FREEIPA_ADMIN_PASSWORD" ] && echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"
+          [ -n "$SSH_PRIVATE_KEY" ] && echo "::add-mask::$SSH_PRIVATE_KEY"
+          [ -n "$ANS_SSH_PUBLIC_KEY" ] && echo "::add-mask::$ANS_SSH_PUBLIC_KEY"
+          [ -n "$NEXUS_PASSWORD" ] && echo "::add-mask::$NEXUS_PASSWORD"
+          [ -n "$OCTOPUS_API_KEY" ] && echo "::add-mask::$OCTOPUS_API_KEY"
+          [ -n "$SONAR_TOKEN" ] && echo "::add-mask::$SONAR_TOKEN"
+          [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
+          [ -n "$TAILSCALE_AUTH_KEY" ] && echo "::add-mask::$TAILSCALE_AUTH_KEY"
           
           # Verify credentials are available
           if [ -z "$MINIO_ROOT_USER" ] || [ -z "$MINIO_ROOT_PASSWORD" ]; then
@@ -211,10 +231,16 @@ jobs:
           export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
           export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
           
+          # Determine MinIO endpoint: use input, Doppler secret, or default
+          MINIO_ENDPOINT_URL="${{ inputs.minio_endpoint }}"
+          if [ -z "$MINIO_ENDPOINT_URL" ]; then
+            MINIO_ENDPOINT_URL="${MINIO_ENDPOINT:-http://minio.tailnet:9000}"
+          fi
+          
           # Terraform Init
           terraform init \
             -backend-config="bucket=terraform-state" \
-            -backend-config='endpoints={s3="http://192.168.20.10:9000"}' \
+            -backend-config="endpoints={s3=\"${MINIO_ENDPOINT_URL}\"}" \
             -backend-config="access_key=$MINIO_ROOT_USER" \
             -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
           

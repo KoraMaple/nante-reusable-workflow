@@ -1,3 +1,8 @@
+# ⚠️ SECURITY NOTICE:
+# This workflow defaults to GitHub-hosted runners for safety in public repositories.
+# Only use runner_type: "self-hosted" in PRIVATE repositories with trusted contributors.
+# Jobs accessing internal services (Nexus, SonarQube) require Tailscale for GitHub-hosted runners.
+
 name: "Reusable CI Build"
 
 on:
@@ -53,9 +58,9 @@ on:
         default: false
       runner_type:
         type: string
-        description: 'Runner type: "github-hosted" (uses ubuntu-latest) or "self-hosted" (uses self-hosted runner)'
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest) or "self-hosted" (uses self-hosted runner). ⚠️ Use self-hosted ONLY in private repositories.'
         required: false
-        default: 'self-hosted'
+        default: 'github-hosted'
       use_tailscale:
         type: boolean
         description: 'Connect to Tailscale network (required for GitHub-hosted runners to access internal services)'

@@ -1,3 +1,8 @@
+# ⚠️ SECURITY NOTICE:
+# This workflow defaults to GitHub-hosted runners for safety in public repositories.
+# Only use runner_type: "self-hosted" in PRIVATE repositories with trusted contributors.
+# Fork PRs will require manual approval before running infrastructure operations.
+
 name: Cleanup Orphaned Octopus Targets
 
 on:
@@ -17,9 +22,9 @@ on:
         default: true
         type: boolean
       runner_type:
-        description: 'Runner type: "github-hosted" or "self-hosted"'
+        description: 'Runner type: "github-hosted" or "self-hosted". ⚠️ Use self-hosted ONLY in private repositories.'
         required: false
-        default: 'self-hosted'
+        default: 'github-hosted'
         type: string
       tailscale_tags:
         description: 'Tailscale ACL tags for GitHub-hosted runner'
@@ -34,6 +39,10 @@ permissions:
 jobs:
   cleanup:
     runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
+    # Prevent fork PRs from running infrastructure operations - maintainers must explicitly trigger
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     
     steps:
       # Connect to Tailscale for GitHub-hosted runners
@@ -62,8 +71,10 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
-          # Mask sensitive values to prevent log exposure
-          if [ -n "$OCTOPUS_API_KEY" ]; then echo "::add-mask::$OCTOPUS_API_KEY"; fi
+          # Mask all sensitive values to prevent log exposure
+          [ -n "$OCTOPUS_API_KEY" ] && echo "::add-mask::$OCTOPUS_API_KEY"
+          [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ] && echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"
+          [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
           
           DAYS_OFFLINE="${{ inputs.days_offline || '7' }}"
           DRY_RUN="${{ inputs.dry_run || 'true' }}"
