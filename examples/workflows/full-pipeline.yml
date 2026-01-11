@@ -19,6 +19,8 @@ jobs:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
   # Step 2: Provision infrastructure (only on main branch)
+  # Note: Requires the reusable-provision.yml workflow from this repository
+  # See USAGE.md for details on configuring infrastructure provisioning
   provision:
     needs: ci
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main

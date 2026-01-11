@@ -123,24 +123,59 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.language_version || '3.11' }}
-          cache: ${{ inputs.build_tool == 'poetry' && 'poetry' || 'pip' }}
+
+      - name: Setup Python cache
+        if: inputs.language == 'python' && inputs.build_tool == 'poetry'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.language_version || '3.11' }}
+          cache: 'poetry'
+
+      - name: Setup Python cache (pip)
+        if: inputs.language == 'python' && inputs.build_tool != 'poetry'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.language_version || '3.11' }}
+          cache: 'pip'
 
       # Language Setup - Node
-      - name: Setup Node
-        if: inputs.language == 'node'
+      - name: Setup Node with npm cache
+        if: inputs.language == 'node' && (inputs.build_tool == '' || inputs.build_tool == 'npm')
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.language_version || '20' }}
-          cache: ${{ inputs.build_tool || 'npm' }}
+          cache: 'npm'
+
+      - name: Setup Node with yarn cache
+        if: inputs.language == 'node' && inputs.build_tool == 'yarn'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.language_version || '20' }}
+          cache: 'yarn'
+
+      - name: Setup Node with pnpm cache
+        if: inputs.language == 'node' && inputs.build_tool == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.language_version || '20' }}
+          cache: 'pnpm'
 
       # Language Setup - Java
-      - name: Setup Java
-        if: inputs.language == 'java'
+      - name: Setup Java with maven cache
+        if: inputs.language == 'java' && (inputs.build_tool == '' || inputs.build_tool == 'maven')
         uses: actions/setup-java@v4
         with:
           java-version: ${{ inputs.language_version || '17' }}
           distribution: 'temurin'
-          cache: ${{ inputs.build_tool == 'gradle' && 'gradle' || 'maven' }}
+          cache: 'maven'
+
+      - name: Setup Java with gradle cache
+        if: inputs.language == 'java' && inputs.build_tool == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.language_version || '17' }}
+          distribution: 'temurin'
+          cache: 'gradle'
 
       # Install Dependencies - Go
       - name: Install Go dependencies
@@ -347,8 +382,9 @@ jobs:
             poetry build
             cp dist/* ./artifacts/ || true
           else
-            # Create a source distribution
-            python setup.py sdist bdist_wheel || true
+            # Use modern Python build tools
+            pip install build
+            python -m build
             cp dist/* ./artifacts/ || true
           fi
           
@@ -444,13 +480,14 @@ jobs:
           fetch-depth: 0
 
       - name: Install SonarScanner
+        env:
+          SONAR_SCANNER_VERSION: "5.0.1.3006"
         run: |
           # Check if sonar-scanner is already installed
           if ! command -v sonar-scanner &> /dev/null; then
-            echo "Installing SonarScanner..."
+            echo "Installing SonarScanner version ${SONAR_SCANNER_VERSION}..."
             
             # Download and install SonarScanner
-            SONAR_SCANNER_VERSION="5.0.1.3006"
             wget -q "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
             unzip -q "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
             sudo mv "sonar-scanner-${SONAR_SCANNER_VERSION}-linux" /opt/sonar-scanner
