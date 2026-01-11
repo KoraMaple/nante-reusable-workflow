@@ -1,0 +1,52 @@
+# Example: CI Build with GitHub-Hosted Runner
+#
+# This example shows how to run CI builds on GitHub-hosted runners.
+# For builds that don't need internal infrastructure access, you can use
+# GitHub-hosted runners directly without Tailscale.
+#
+# For builds that need to upload artifacts to internal Nexus, enable Tailscale.
+
+name: CI Build (GitHub-Hosted)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Example 1: Simple CI build (no internal infrastructure needed)
+  ci-simple:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@develop
+    with:
+      app_name: "my-go-app"
+      language: "go"
+      language_version: "1.22"
+      build_tool: "make"
+      # Use GitHub-hosted runner (no Tailscale needed for simple builds)
+      runner_type: "github-hosted"
+      use_tailscale: false
+      # Skip Nexus upload (since we don't have VPN access)
+      skip_nexus_upload: true
+      # Still run SonarCloud (cloud-based, no VPN needed)
+      run_sonar_scan: true
+      sonar_organization: "my-org"
+    secrets: inherit
+
+  # Example 2: Full CI with internal services (Nexus, SonarQube)
+  ci-full:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@develop
+    with:
+      app_name: "my-go-app"
+      language: "go"
+      language_version: "1.22"
+      build_tool: "make"
+      # Use GitHub-hosted runner WITH Tailscale for internal access
+      runner_type: "github-hosted"
+      use_tailscale: true
+      tailscale_tags: "tag:ci"
+      # Upload to internal Nexus (requires VPN access)
+      skip_nexus_upload: false
+      # Run self-hosted SonarQube (requires VPN access)
+      run_sonar_scan: true
+    secrets: inherit

@@ -1,12 +1,112 @@
-# Self-Hosted Runner Setup Guide
+# Runner Setup Guide
 
-This document describes the prerequisites and setup required for your self-hosted GitHub Actions runner.
+This document describes the prerequisites and setup options for GitHub Actions runners.
 
-## Prerequisites
+## Runner Options
+
+This repository supports a **hybrid runner architecture**:
+
+| Runner Type | Best For | Requirements | Cost |
+|-------------|----------|--------------|------|
+| **GitHub-Hosted + Tailscale** | CI/CD, testing, open source | Tailscale OAuth credentials | Uses GH Actions minutes |
+| **Self-Hosted (Persistent)** | Production infrastructure | Dedicated machine with LAN access | Free, requires maintenance |
+| **Self-Hosted (Ephemeral)** | High-security environments | Kubernetes or auto-scaling | Free, complex setup |
+
+---
+
+## Option 1: GitHub-Hosted Runners with Tailscale (Recommended for Open Source)
+
+This option uses GitHub-hosted runners with Tailscale VPN for secure access to internal infrastructure.
+
+### Prerequisites
+
+1. **Tailscale Account** with Owner/Admin permissions
+2. **OAuth Client** with `auth_keys` scope for CI
+3. **ACL Tags** configured for CI runners
+
+### Setup
+
+#### 1. Create Tailscale OAuth Client
+
+1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/settings/oauth) → Settings → OAuth Clients
+2. Create a new OAuth client with:
+   - **Description**: `GitHub Actions CI`
+   - **Tags**: `tag:ci`
+   - **Scopes**: `auth_keys` (write)
+3. Save the **Client ID** and **Client Secret**
+
+#### 2. Configure GitHub Secrets
+
+Add these secrets to your GitHub repository (Settings → Secrets → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `TS_OAUTH_CLIENT_ID` | Your Tailscale OAuth Client ID |
+| `TS_OAUTH_CLIENT_SECRET` | Your Tailscale OAuth Client Secret |
+
+#### 3. Configure Tailscale ACLs
+
+Add CI runner access rules to your Tailscale ACL:
+
+```json
+{
+  "tagOwners": {
+    "tag:ci": ["autogroup:admin"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:ci"],
+      "dst": [
+        "tag:proxmox:22,8006",
+        "tag:minio:9000",
+        "tag:target-vms:22"
+      ]
+    }
+  ]
+}
+```
+
+#### 4. Use in Workflows
+
+```yaml
+jobs:
+  provision:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@develop
+    with:
+      app_name: "nginx"
+      vlan_tag: "20"
+      vm_target_ip: "192.168.20.50"
+      runner_type: "github-hosted"  # Use GitHub-hosted runner
+      tailscale_tags: "tag:ci"      # ACL tags for access control
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+```
+
+### Benefits
+
+- ✅ No infrastructure to maintain
+- ✅ Ephemeral runners (clean environment each time)
+- ✅ Works with public repositories
+- ✅ Automatic scaling
+- ✅ Secure network access via Tailscale
+
+---
+
+## Option 2: Self-Hosted Runners (Traditional)
+
+This option uses dedicated self-hosted runners with direct LAN access.
+
+### Prerequisites
 
 Your self-hosted runner needs the following installed:
 
-### Required Packages
+#### Required Packages
 
 ```bash
 # Update package list
@@ -18,12 +118,13 @@ sudo apt-get install -y \
   terraform \
   sshpass \
   git \
-  curl
+  curl \
+  jq
 ```
 
-### Passwordless Sudo (Recommended)
+#### Passwordless Sudo (Recommended)
 
-For workflows to install packages automatically, configure passwordless sudo for the runner user:
+For workflows to install packages automatically:
 
 ```bash
 # Replace 'runner' with your actual runner username
@@ -31,11 +132,9 @@ echo 'runner ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/github-runner
 sudo chmod 440 /etc/sudoers.d/github-runner
 ```
 
-**Security Note:** Only do this on dedicated runner machines. Do not configure passwordless sudo on shared systems.
+**Security Note:** Only do this on dedicated runner machines.
 
-## Alternative: Pre-install All Dependencies
-
-If you prefer not to use passwordless sudo, pre-install all required packages:
+#### Pre-install All Dependencies
 
 ```bash
 # One-time setup script for runner
@@ -46,6 +145,7 @@ sudo apt-get install -y \
   sshpass \
   git \
   curl \
+  jq \
   python3-pip \
   openssh-client
 
@@ -62,16 +162,14 @@ sudo apt-get update
 sudo apt-get install -y doppler
 ```
 
-## Verify Setup
-
-Run this script to verify your runner is properly configured:
+### Verify Setup
 
 ```bash
 #!/bin/bash
 echo "Checking runner prerequisites..."
 
 # Check for required commands
-REQUIRED_COMMANDS="ansible terraform sshpass git curl doppler"
+REQUIRED_COMMANDS="ansible terraform sshpass git curl doppler jq"
 MISSING=""
 
 for cmd in $REQUIRED_COMMANDS; do
@@ -101,17 +199,50 @@ else
 fi
 ```
 
-## Runner User Permissions
+### Network Requirements
 
-The runner user needs:
-- Read/write access to the runner's work directory
-- Ability to execute commands
-- Network access to:
-  - GitHub API
-  - Doppler API
-  - Your Proxmox server
-  - Your MinIO server
-  - Target VMs for SSH connections
+The runner needs access to:
+- GitHub API (internet)
+- Doppler API (internet)
+- Proxmox server (LAN, port 8006)
+- MinIO server (LAN, port 9000)
+- Target VMs (LAN, port 22)
+
+---
+
+## Option 3: Ephemeral Self-Hosted Runners
+
+For high-security environments, use ephemeral runners that are created for each job and destroyed afterward.
+
+### Actions Runner Controller (Kubernetes)
+
+If you have Kubernetes, use [actions-runner-controller](https://github.com/actions/actions-runner-controller):
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: nante-runner
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: KoraMaple/nante-reusable-workflow
+      ephemeral: true
+      labels:
+        - self-hosted
+        - linux
+        - ephemeral
+```
+
+### Benefits
+
+- ✅ Fresh environment for each job
+- ✅ No persistent state
+- ✅ Auto-scaling
+- ✅ Kubernetes-native
+
+---
 
 ## Target VM Requirements
 
@@ -133,7 +264,7 @@ sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/
 sudo systemctl restart sshd
 ```
 
-For detailed troubleshooting, see [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
+---
 
 ## Troubleshooting
 
@@ -159,16 +290,26 @@ sudo apt-get update && sudo apt-get install -y sshpass
 
 **Cause:** Doppler CLI not installed on runner.
 
-**Solution:** The `dopplerhq/cli-action@v3` should install it automatically, but you can pre-install:
-```bash
-# See installation commands in "Alternative" section above
-```
+**Solution:** The `dopplerhq/cli-action@v3` should install it automatically, but you can pre-install (see above).
+
+### "Tailscale connection failed"
+
+**Cause:** OAuth credentials incorrect or missing.
+
+**Solution:**
+1. Verify `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_CLIENT_SECRET` secrets are set
+2. Check OAuth client has `auth_keys` scope
+3. Verify ACL allows the tags you're using
+
+---
 
 ## Security Best Practices
 
-1. **Dedicated Runner Machine** - Use a dedicated VM/container for the runner
-2. **Network Isolation** - Place runner in appropriate VLAN (e.g., VLAN 20 for internal)
-3. **Minimal Permissions** - Only grant necessary permissions
-4. **Regular Updates** - Keep runner OS and packages updated
-5. **Monitor Logs** - Review runner logs regularly
-6. **Rotate Secrets** - Regularly rotate Doppler tokens and GitHub PATs
+1. **Use GitHub-Hosted Runners When Possible** - Less maintenance, automatic security updates
+2. **Ephemeral Runners** - Use ephemeral mode for self-hosted runners when possible
+3. **Tailscale ACLs** - Restrict CI runner access to only required resources
+4. **Rotate Secrets Regularly** - Update Doppler tokens, OAuth secrets, and PATs
+5. **Monitor Logs** - Review runner and workflow logs for anomalies
+6. **Environment Protection** - Use GitHub Environment Protection Rules for production
+
+See [SECURITY.md](./SECURITY.md) for comprehensive security guidelines.
