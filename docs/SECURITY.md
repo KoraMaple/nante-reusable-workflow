@@ -92,12 +92,16 @@ All secrets are managed through [Doppler](https://doppler.com/):
 
 Only these secrets should be stored in GitHub:
 
-| Secret | Purpose |
-|--------|---------|
-| `DOPPLER_TOKEN` | Service token for Doppler access |
-| `DOPPLER_TARGET_PROJECT` | Doppler project name |
-| `DOPPLER_TARGET_CONFIG` | Doppler config (dev, staging, prod) |
-| `GH_PAT` | GitHub PAT for workflow checkout |
+| Secret | Purpose | Required |
+|--------|---------|----------|
+| `DOPPLER_TOKEN` | Service token for Doppler access | Yes |
+| `DOPPLER_TARGET_PROJECT` | Doppler project name | Yes |
+| `DOPPLER_TARGET_CONFIG` | Doppler config (dev, staging, prod) | Yes |
+| `GH_PAT` | GitHub PAT for workflow checkout | Yes |
+| `TS_OAUTH_CLIENT_ID` | Tailscale OAuth Client ID | For GitHub-hosted runners |
+| `TS_OAUTH_CLIENT_SECRET` | Tailscale OAuth Client Secret | For GitHub-hosted runners |
+
+**Note**: `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_CLIENT_SECRET` are required when using `runner_type: github-hosted` to enable Tailscale VPN connectivity.
 
 ### Secret Masking
 

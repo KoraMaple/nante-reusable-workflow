@@ -66,6 +66,18 @@ on:
         description: 'Tailscale ACL tags for the runner (comma-separated, e.g., "tag:ci,tag:build")'
         required: false
         default: 'tag:ci'
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      DOPPLER_TARGET_PROJECT:
+        required: true
+      DOPPLER_TARGET_CONFIG:
+        required: true
+      # Optional: Required for GitHub-hosted runners with Tailscale
+      TS_OAUTH_CLIENT_ID:
+        required: false
+      TS_OAUTH_CLIENT_SECRET:
+        required: false
 
 jobs:
   fetch-secrets:

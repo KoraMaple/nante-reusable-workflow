@@ -21,6 +21,11 @@ on:
         required: false
         default: 'self-hosted'
         type: string
+      tailscale_tags:
+        description: 'Tailscale ACL tags for GitHub-hosted runner'
+        required: false
+        default: 'tag:ci'
+        type: string
 
 jobs:
   cleanup:
@@ -34,7 +39,7 @@ jobs:
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci
+          tags: ${{ inputs.tailscale_tags }}
 
       - name: Checkout Repository
         uses: actions/checkout@v4

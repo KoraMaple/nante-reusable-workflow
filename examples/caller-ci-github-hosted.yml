@@ -4,7 +4,9 @@
 # For builds that don't need internal infrastructure access, you can use
 # GitHub-hosted runners directly without Tailscale.
 #
-# For builds that need to upload artifacts to internal Nexus, enable Tailscale.
+# For builds that need to upload artifacts to internal Nexus or use
+# self-hosted SonarQube, enable Tailscale.
+# SonarCloud (cloud-based) does NOT require Tailscale connectivity.
 
 name: CI Build (GitHub-Hosted)
 
@@ -33,7 +35,7 @@ jobs:
       sonar_organization: "my-org"
     secrets: inherit
 
-  # Example 2: Full CI with internal services (Nexus, SonarQube)
+  # Example 2: Full CI with internal services (Nexus, self-hosted SonarQube)
   ci-full:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@develop
     with:
@@ -48,5 +50,6 @@ jobs:
       # Upload to internal Nexus (requires VPN access)
       skip_nexus_upload: false
       # Run self-hosted SonarQube (requires VPN access)
+      # Note: For SonarCloud (cloud-based), VPN is NOT required
       run_sonar_scan: true
     secrets: inherit
