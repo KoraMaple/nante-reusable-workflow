@@ -15,8 +15,7 @@ jobs:
       run_tests: true
       run_sonar_scan: true
       skip_nexus_upload: false
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 
   # Step 2: Provision infrastructure (only on main branch)
   # Note: Requires the reusable-provision.yml workflow from this repository

@@ -22,8 +22,7 @@ jobs:
       app_name: "my-go-app"
       go_version: "1.22"
       build_tool: "make"
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Python Application
@@ -42,8 +41,7 @@ jobs:
       app_name: "my-python-app"
       python_version: "3.11"
       build_tool: "poetry"
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Node.js Application
@@ -62,8 +60,7 @@ jobs:
       app_name: "my-node-app"
       node_version: "20"
       build_tool: "npm"
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Java Application
@@ -82,8 +79,7 @@ jobs:
       app_name: "my-java-app"
       java_version: "17"
       build_tool: "maven"
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 ### Infrastructure Provisioning

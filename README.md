@@ -53,8 +53,7 @@ jobs:
       app_name: "my-go-app"
       go_version: "1.22"
       build_tool: "make"
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Usage - Go Application (using main workflow)
@@ -78,8 +77,7 @@ jobs:
       run_tests: true
       run_sonar_scan: true
       skip_nexus_upload: false
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Usage - Python Application
@@ -102,8 +100,7 @@ jobs:
       build_tool: "poetry"
       run_tests: true
       run_sonar_scan: true
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Usage - Node.js Application
@@ -126,8 +123,7 @@ jobs:
       build_tool: "npm"
       run_tests: true
       run_sonar_scan: true
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Usage - Java Application
@@ -150,8 +146,7 @@ jobs:
       build_tool: "maven"
       run_tests: true
       run_sonar_scan: true
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 ```
 
 #### Workflow Inputs
@@ -264,8 +259,7 @@ jobs:
       language: "go"
       run_tests: true
       run_sonar_scan: true
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
 
   # Step 2: Provision infrastructure
   provision:

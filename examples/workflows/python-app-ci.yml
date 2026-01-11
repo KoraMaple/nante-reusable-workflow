@@ -16,5 +16,4 @@ jobs:
       run_tests: true
       run_sonar_scan: true
       skip_nexus_upload: false
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit

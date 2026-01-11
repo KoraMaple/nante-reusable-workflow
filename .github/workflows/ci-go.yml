@@ -37,11 +37,6 @@ on:
         description: 'Skip artifact upload to Nexus'
         required: false
         default: false
-    secrets:
-      DOPPLER_TOKEN:
-        description: 'Doppler token for fetching secrets'
-        required: true
-
 jobs:
   ci-build:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
@@ -54,5 +49,4 @@ jobs:
       run_tests: ${{ inputs.run_tests }}
       run_sonar_scan: ${{ inputs.run_sonar_scan }}
       skip_nexus_upload: ${{ inputs.skip_nexus_upload }}
-    secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    secrets: inherit
