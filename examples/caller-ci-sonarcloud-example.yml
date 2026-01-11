@@ -1,0 +1,22 @@
+name: Go Application CI with SonarCloud
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: "my-go-app"
+      language: "go"
+      language_version: "1.22"
+      build_tool: "make"
+      run_tests: true
+      run_sonar_scan: true
+      sonar_organization: "my-organization"  # Required for SonarCloud
+      skip_nexus_upload: false
+    secrets: inherit

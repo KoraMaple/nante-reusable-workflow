@@ -157,6 +157,21 @@ jobs:
     secrets: inherit
 ```
 
+#### Python Application with Poetry and SonarCloud
+```yaml
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: "my-python-service"
+      language: "python"
+      language_version: "3.11"
+      build_tool: "poetry"
+      run_sonar_scan: true
+      sonar_organization: "my-org"  # Required for SonarCloud
+    secrets: inherit
+```
+
 #### Node.js Application with Yarn
 ```yaml
 jobs:
@@ -194,7 +209,8 @@ jobs:
 | `language_version` | ❌ | Latest stable | Language version |
 | `working_directory` | ❌ | `.` | Directory to run builds in |
 | `run_tests` | ❌ | `true` | Execute test suite |
-| `run_sonar_scan` | ❌ | `true` | Run SonarQube analysis |
+| `run_sonar_scan` | ❌ | `true` | Run SonarQube/SonarCloud analysis |
+| `sonar_organization` | ❌ | - | SonarCloud organization key (only for SonarCloud) |
 | `artifact_type` | ❌ | - | Artifact type hint |
 | `skip_nexus_upload` | ❌ | `false` | Skip Nexus upload |
 
@@ -209,10 +225,15 @@ Your Doppler configuration should contain (all optional):
 - `NEXUS_URL`: Nexus repository URL (e.g., `http://nexus.example.com:8081`)
 - `NEXUS_USERNAME`: Nexus authentication username
 - `NEXUS_PASSWORD`: Nexus authentication password
-- `SONAR_URL`: SonarQube server URL (e.g., `http://sonar.example.com:9000`)
-- `SONAR_TOKEN`: SonarQube authentication token
+- **For self-hosted SonarQube:**
+  - `SONAR_URL`: SonarQube server URL (e.g., `http://sonar.example.com:9000`)
+  - `SONAR_TOKEN`: SonarQube authentication token
+- **For SonarCloud:**
+  - `SONAR_URL`: `https://sonarcloud.io`
+  - `SONAR_TOKEN`: SonarCloud authentication token
+  - Set `sonar_organization` input parameter in workflow call
 
-**Note**: If Nexus or SonarQube credentials are not configured in Doppler, those steps will be automatically skipped with a warning.
+**Note**: If Nexus or SonarQube/SonarCloud credentials are not configured in Doppler, those steps will be automatically skipped with a warning.
 
 ### Chaining CI with Other Workflows
 

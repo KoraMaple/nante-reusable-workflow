@@ -70,13 +70,21 @@ NEXUS_PASSWORD=<nexus-password>
 
 **Note**: If these are not set, artifact upload to Nexus will be skipped in CI workflows.
 
-### SonarQube (for CI/CD code quality scanning)
+### SonarQube/SonarCloud (for CI/CD code quality scanning)
+
+**For self-hosted SonarQube:**
 ```
 SONAR_URL=http://sonar.example.com:9000
 SONAR_TOKEN=<sonarqube-token>
 ```
 
-**Note**: If these are not set, SonarQube code scanning will be skipped in CI workflows.
+**For SonarCloud:**
+```
+SONAR_URL=https://sonarcloud.io
+SONAR_TOKEN=<sonarcloud-token>
+```
+
+**Note**: If these are not set, code scanning will be skipped in CI workflows. For SonarCloud, you also need to provide the `sonar_organization` input parameter in the workflow call.
 
 ### MinIO (for Terraform state backend)
 ```
@@ -141,9 +149,13 @@ doppler secrets set NEXUS_URL="http://nexus.example.com:8081"
 doppler secrets set NEXUS_USERNAME="admin"
 doppler secrets set NEXUS_PASSWORD="nexus-password"
 
-# Optional: Add SonarQube (for CI/CD)
+# Optional: Add SonarQube (for CI/CD - self-hosted)
 doppler secrets set SONAR_URL="http://sonar.example.com:9000"
 doppler secrets set SONAR_TOKEN="sonarqube-token"
+
+# Optional: Add SonarCloud (for CI/CD - cloud)
+doppler secrets set SONAR_URL="https://sonarcloud.io"
+doppler secrets set SONAR_TOKEN="sonarcloud-token"
 
 # Required: Add MinIO (for Terraform state)
 doppler secrets set MINIO_ROOT_USER="admin"

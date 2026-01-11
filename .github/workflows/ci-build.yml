@@ -33,9 +33,14 @@ on:
         default: true
       run_sonar_scan:
         type: boolean
-        description: 'Whether to run SonarQube scan'
+        description: 'Whether to run SonarQube/SonarCloud scan'
         required: false
         default: true
+      sonar_organization:
+        type: string
+        description: 'SonarCloud organization key (only for SonarCloud, leave empty for self-hosted SonarQube)'
+        required: false
+        default: ''
       artifact_type:
         type: string
         description: 'Type of artifact (binary, jar, docker, etc.)'
@@ -384,7 +389,7 @@ jobs:
           java-version: ${{ inputs.language_version || '17' }}
           distribution: 'temurin'
 
-      - name: SonarQube Scan
+      - name: SonarQube/SonarCloud Scan
         working-directory: ${{ inputs.working_directory }}
         env:
           SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
@@ -392,14 +397,16 @@ jobs:
         run: |
           set -e
           
-          # Check if SonarQube credentials are available
+          # Check if SonarQube/SonarCloud credentials are available
           if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
-            echo "⚠️  WARNING: SonarQube credentials not found in Doppler"
-            echo "Skipping code scan. To enable, add SONAR_URL and SONAR_TOKEN to Doppler."
+            echo "⚠️  WARNING: SonarQube/SonarCloud credentials not found in Doppler"
+            echo "Skipping code scan. To enable:"
+            echo "  - Self-hosted SonarQube: Add SONAR_URL and SONAR_TOKEN to Doppler"
+            echo "  - SonarCloud: Set SONAR_URL=https://sonarcloud.io and add SONAR_TOKEN to Doppler"
             exit 0
           fi
           
-          echo "🔍 Running SonarQube scan..."
+          echo "🔍 Running SonarQube/SonarCloud scan..."
           
           # Install sonar-scanner if not available
           if ! command -v sonar-scanner &> /dev/null; then
@@ -433,6 +440,12 @@ jobs:
               ;;
           esac
           
+          # Add SonarCloud organization if provided
+          if [ -n "${{ inputs.sonar_organization }}" ]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS -Dsonar.organization=${{ inputs.sonar_organization }}"
+            echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
+          fi
+          
           # Run scan
           sonar-scanner \
             -Dsonar.projectKey=${{ inputs.app_name }} \
@@ -444,5 +457,5 @@ jobs:
             -Dsonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
             $EXTRA_PARAMS
           
-          echo "✓ SonarQube scan completed"
+          echo "✓ SonarQube/SonarCloud scan completed"
           echo "📊 View results at: ${SONAR_HOST_URL}/dashboard?id=${{ inputs.app_name }}"
