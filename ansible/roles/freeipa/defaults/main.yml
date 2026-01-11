@@ -1,0 +1,4 @@
+---
+# FreeIPA Server default variables
+freeipa_domain: "tail09bdcf.ts.net"
+freeipa_realm: "TAIL09BDCF.TS.NET"

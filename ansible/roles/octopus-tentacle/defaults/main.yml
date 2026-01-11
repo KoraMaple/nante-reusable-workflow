@@ -1,0 +1,26 @@
+---
+# Default variables for octopus-tentacle role
+
+# Octopus Server configuration
+octopus_server_url: "{{ lookup('env', 'OCTOPUS_SERVER_URL') }}"
+octopus_api_key: "{{ lookup('env', 'OCTOPUS_API_KEY') }}"
+octopus_space_id: "{{ lookup('env', 'OCTOPUS_SPACE_ID') | default('Spaces-1', true) }}"
+
+# Environment configuration
+octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
+
+# Tentacle configuration
+tentacle_instance_name: "Tentacle"
+tentacle_port: 10933
+tentacle_communication_mode: "Polling"  # Options: Polling, Listening
+
+# Target configuration
+target_name: "{{ inventory_hostname }}"
+target_roles: []  # List of roles to assign to this target (e.g., ['web-server', 'docker-host'])
+target_tenants: []  # List of tenants if using multi-tenancy
+
+# Installation
+tentacle_download_url: "https://octopus.com/downloads/latest/Linux_x64TarGz/OctopusTentacle"
+tentacle_install_dir: "/opt/octopus/tentacle"
+tentacle_app_dir: "/home/Octopus/Applications"
+tentacle_config_dir: "/etc/octopus"

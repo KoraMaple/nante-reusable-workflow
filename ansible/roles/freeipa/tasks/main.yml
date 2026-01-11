@@ -1,0 +1,271 @@
+---
+# FreeIPA Server Installation and Configuration
+# Domain: kora.ldap.local
+# This role installs and configures FreeIPA server for centralized authentication
+
+- name: Check virtualization type
+  shell: systemd-detect-virt
+  register: virt_type
+  changed_when: false
+  failed_when: false
+
+- name: Set LXC fact
+  set_fact:
+    is_lxc: "{{ virt_type.stdout == 'lxc' }}"
+
+- name: Detect OS family
+  set_fact:
+    is_rhel: "{{ ansible_os_family == 'RedHat' }}"
+
+- name: Generate FreeIPA admin password
+  shell: |
+    if [ ! -f /tmp/freeipa_admin_password ]; then
+      tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 10 > /tmp/freeipa_admin_password
+    fi
+    cat /tmp/freeipa_admin_password
+  register: admin_password_result
+  changed_when: false
+
+- name: Generate FreeIPA DS password
+  shell: |
+    if [ ! -f /tmp/freeipa_ds_password ]; then
+      tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 10 > /tmp/freeipa_ds_password
+    fi
+    cat /tmp/freeipa_ds_password
+  register: ds_password_result
+  changed_when: false
+
+- name: Set all FreeIPA facts
+  set_fact:
+    freeipa_domain: "tail09bdcf.ts.net"
+    freeipa_realm: "TAIL09BDCF.TS.NET"
+    ipa_admin_password: "{{ admin_password_result.stdout }}"
+    ipa_ds_password: "{{ ds_password_result.stdout }}"
+    freeipa_hostname: "{{ target_hostname }}.{{ freeipa_domain }}"
+
+- name: Display generated passwords
+  debug:
+    msg:
+      - "==================================================================="
+      - "FreeIPA Admin Credentials (SAVE THESE!):"
+      - "==================================================================="
+      - "Domain: {{ freeipa_domain }}"
+      - "Realm: {{ freeipa_realm }}"
+      - "Admin User: admin"
+      - "Admin Password: {{ ipa_admin_password }}"
+      - "Directory Manager Password: {{ ipa_ds_password }}"
+      - "Web UI: https://{{ freeipa_hostname }}"
+      - "==================================================================="
+      - "IMPORTANT: Save these credentials securely!"
+      - "==================================================================="
+
+- name: Update /etc/hosts with FreeIPA hostname
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ ansible_default_ipv4.address }} {{ freeipa_hostname }} {{ target_hostname }}"
+    state: present
+
+- name: Set hostname to FQDN (non-LXC)
+  hostname:
+    name: "{{ freeipa_hostname }}"
+  when: not is_lxc
+
+- name: Set hostname to FQDN (LXC - Debian)
+  shell: |
+    echo "{{ freeipa_hostname }}" > /etc/hostname
+    hostname "{{ freeipa_hostname }}"
+  when: is_lxc and not is_rhel
+  changed_when: true
+
+- name: Set hostname to FQDN (LXC - RHEL)
+  command: hostnamectl set-hostname "{{ freeipa_hostname }}"
+  when: is_lxc and is_rhel
+  changed_when: true
+
+- name: Install FreeIPA server packages (RHEL/CentOS)
+  dnf:
+    name:
+      - freeipa-server
+      - freeipa-server-dns
+    state: present
+  environment:
+    LANG: en_US.UTF-8
+  when: is_rhel
+  register: freeipa_install_result
+  failed_when: false
+
+- name: Display FreeIPA package installation result
+  debug:
+    msg: "{{ freeipa_install_result }}"
+  when: is_rhel
+
+- name: Fail if FreeIPA packages not available
+  fail:
+    msg: |
+      FreeIPA packages are not available on this system.
+      Please ensure you are using a supported RHEL-based distribution (Fedora, CentOS Stream, Rocky Linux, etc.)
+      and that the appropriate repositories are enabled.
+      
+      For Fedora: dnf install freeipa-server freeipa-server-dns
+      For CentOS Stream/Rocky: dnf install epel-release && dnf install freeipa-server freeipa-server-dns
+  when: is_rhel and freeipa_install_result.failed
+
+- name: Check if FreeIPA is already configured
+  stat:
+    path: /etc/ipa/default.conf
+  register: freeipa_configured
+
+- name: Install FreeIPA server
+  command: >
+    ipa-server-install
+    --domain={{ freeipa_domain }}
+    --realm={{ freeipa_realm }}
+    --ds-password={{ ipa_ds_password }}
+    --admin-password={{ ipa_admin_password }}
+    --hostname={{ freeipa_hostname }}
+    --no-ntp
+    --unattended
+  when: not freeipa_configured.stat.exists
+  register: freeipa_install
+  async: 1800
+  poll: 10
+
+- name: Display FreeIPA installation result
+  debug:
+    msg: "{{ freeipa_install.stdout_lines }}"
+  when: freeipa_install.changed
+
+- name: Ensure FreeIPA services are started and enabled
+  systemd:
+    name: "{{ service }}"
+    state: started
+    enabled: yes
+  loop:
+    - ipa
+    - httpd
+    - krb5kdc
+    - kadmin
+  loop_control:
+    loop_var: service
+
+- name: Wait for FreeIPA web UI to be available
+  uri:
+    url: "https://{{ freeipa_hostname }}/ipa/ui"
+    validate_certs: no
+    status_code: 200
+  register: webui_check
+  until: webui_check.status == 200
+  retries: 30
+  delay: 10
+  ignore_errors: yes
+
+- name: Authenticate with FreeIPA
+  shell: echo "{{ ipa_admin_password }}" | kinit admin
+  changed_when: false
+  no_log: true
+
+- name: Create owners group for server access
+  command: ipa group-add owners --desc="Server Administrators Group"
+  register: group_create
+  failed_when: 
+    - group_create.rc != 0
+    - "'already exists' not in group_create.stderr"
+  changed_when: "'Added group' in group_create.stdout"
+
+- name: Configure HBAC rule for owners group
+  block:
+    - name: Disable allow_all HBAC rule
+      command: ipa hbacrule-disable allow_all
+      register: hbac_disable
+      failed_when:
+        - hbac_disable.rc != 0
+        - "'already disabled' not in hbac_disable.stderr"
+      changed_when: "'Disabled HBAC rule' in hbac_disable.stdout"
+
+    - name: Create HBAC rule for owners
+      command: >
+        ipa hbacrule-add owners_access
+        --desc="Allow owners group to access all servers"
+      register: hbac_create
+      failed_when:
+        - hbac_create.rc != 0
+        - "'already exists' not in hbac_create.stderr"
+      changed_when: "'Added HBAC rule' in hbac_create.stdout"
+
+    - name: Add owners group to HBAC rule
+      command: ipa hbacrule-add-user owners_access --groups=owners
+      register: hbac_add_group
+      failed_when:
+        - hbac_add_group.rc != 0
+        - "'already a member' not in hbac_add_group.stderr"
+      changed_when: "'members added' in hbac_add_group.stdout"
+
+    - name: Add all hosts to HBAC rule
+      command: ipa hbacrule-mod owners_access --hostcat=all
+      register: hbac_add_hosts
+      changed_when: "'Modified HBAC rule' in hbac_add_hosts.stdout"
+
+    - name: Add all services to HBAC rule
+      command: ipa hbacrule-mod owners_access --servicecat=all
+      register: hbac_add_services
+      changed_when: "'Modified HBAC rule' in hbac_add_services.stdout"
+
+- name: Configure sudo rules for owners group
+  block:
+    - name: Create sudo rule for owners
+      command: >
+        ipa sudorule-add owners_sudo
+        --desc="Allow owners group full sudo access"
+      register: sudo_create
+      failed_when:
+        - sudo_create.rc != 0
+        - "'already exists' not in sudo_create.stderr"
+      changed_when: "'Added Sudo Rule' in sudo_create.stdout"
+
+    - name: Add owners group to sudo rule
+      command: ipa sudorule-add-user owners_sudo --groups=owners
+      register: sudo_add_group
+      failed_when:
+        - sudo_add_group.rc != 0
+        - "'already a member' not in sudo_add_group.stderr"
+      changed_when: "'members added' in sudo_add_group.stdout"
+
+    - name: Configure sudo rule for all hosts
+      command: ipa sudorule-mod owners_sudo --hostcat=all
+      register: sudo_add_hosts
+      changed_when: "'Modified Sudo Rule' in sudo_add_hosts.stdout"
+
+    - name: Configure sudo rule for all commands
+      command: ipa sudorule-mod owners_sudo --cmdcat=all
+      register: sudo_add_cmds
+      changed_when: "'Modified Sudo Rule' in sudo_add_cmds.stdout"
+
+- name: Clean up temporary password files
+  file:
+    path: "{{ temp_file }}"
+    state: absent
+  loop:
+    - /tmp/freeipa_admin_password
+    - /tmp/freeipa_ds_password
+  loop_control:
+    loop_var: temp_file
+  ignore_errors: yes
+
+- name: Display final setup information
+  debug:
+    msg:
+      - "==================================================================="
+      - "FreeIPA Server Setup Complete!"
+      - "==================================================================="
+      - "Web UI: https://{{ freeipa_hostname }}"
+      - "Username: admin"
+      - "Password: {{ ipa_admin_password }}"
+      - ""
+      - "Next Steps:"
+      - "1. Access the Web UI and add users to the 'owners' group"
+      - "2. Users in 'owners' group will have full sudo access on all servers"
+      - "3. Configure client servers using the 'ldap-config' role"
+      - ""
+      - "Domain: {{ freeipa_domain }}"
+      - "Realm: {{ freeipa_realm }}"
+      - "==================================================================="

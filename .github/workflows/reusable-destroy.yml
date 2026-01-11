@@ -30,23 +30,54 @@ on:
         default: '20G'
       vm_target_ip:
         type: string
-        description: 'IP of the VM to destroy (must match VLAN subnet)'
+        description: 'IP of the VM to destroy (must match VLAN subnet) - for single instance mode'
+        required: false
+        default: ''
+      instances:
+        type: string
+        description: 'JSON map of instances for multi-instance deployments (e.g., {"node1":{"ip_address":"192.168.10.51"}}). Leave empty for single instance mode.'
+        required: false
+        default: ''
+      environment:
+        type: string
+        description: 'Environment name (dev, staging, prod)'
+        required: false
+        default: 'dev'
+      resource_type:
+        type: string
+        description: 'Resource type: vm or lxc'
+        required: false
+        default: 'vm'
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      DOPPLER_TARGET_PROJECT:
+        required: true
+      DOPPLER_TARGET_CONFIG:
+        required: true
+      GH_PAT:
         required: true
 
 jobs:
   destroy:
     runs-on: self-hosted
-    env:
-      PM_API_TOKEN_ID: ${{ secrets.PROXMOX_TOKEN_ID }}
-      PM_API_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
     
     steps:
       - name: Checkout Reusable Workflow Repo
         uses: actions/checkout@v4
         with:
           repository: KoraMaple/nante-reusable-workflow
-          ref: main
+          ref: develop
           token: ${{ secrets.GH_PAT }}
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Confirm Destruction
         run: |
@@ -56,49 +87,99 @@ jobs:
           fi
           echo "✓ Destruction confirmed for app: ${{ inputs.app_name }}"
 
-      - name: Terraform Destroy Plan
-        env:
-          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
+      - name: Terraform Destroy with Doppler
         run: |
-          # Ensure state directory exists (use home dir for runner permissions)
-          mkdir -p $HOME/.terraform-state
+          doppler run -- bash <<'EOF'
+          set -e
           
           cd terraform/
-          terraform init -backend-config="path=$HOME/.terraform-state/terraform.tfstate"
+          
+          # Set AWS credentials for Terraform S3 backend
+          export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+          export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+          
+          # Set Proxmox credentials
+          export TF_VAR_proxmox_api_url="$PROXMOX_API_URL"
+          export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
+          export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
+          export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
+          
+          # Set Tailscale credentials for Terraform provider
+          export TAILSCALE_OAUTH_CLIENT_ID="$TAILSCALE_OAUTH_CLIENT_ID"
+          export TAILSCALE_OAUTH_CLIENT_SECRET="$TAILSCALE_OAUTH_CLIENT_SECRET"
+          export TAILSCALE_TAILNET="${TAILSCALE_TAILNET:--}"
+          
+          # Terraform Init
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config='endpoints={s3="http://192.168.20.10:9000"}' \
+            -backend-config="access_key=$MINIO_ROOT_USER" \
+            -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
+          
+          # Select workspace
+          terraform workspace select ${{ inputs.app_name }}
           
           # List available workspaces for debugging
           echo "Available workspaces:"
           terraform workspace list
           
-          # Select the app workspace (fail if it doesn't exist - nothing to destroy)
-          if ! terraform workspace select ${{ inputs.app_name }} 2>/dev/null; then
+          # Check if current workspace matches app_name
+          CURRENT_WS=$(terraform workspace show)
+          if [ "$CURRENT_WS" != "${{ inputs.app_name }}" ]; then
             echo "❌ Workspace '${{ inputs.app_name }}' does not exist."
             echo "   This means no infrastructure was provisioned with this app name."
-            echo "   Available workspaces are listed above."
             exit 1
           fi
           
-          # Show what will be destroyed
-          terraform plan -destroy \
-            -var="app_name=${{ inputs.app_name }}" \
-            -var="vlan_tag=${{ inputs.vlan_tag }}" \
-            -var="vm_target_ip=${{ inputs.vm_target_ip }}" \
-            -var="vm_cpu_cores=${{ inputs.cpu_cores }}" \
-            -var="vm_ram_mb=${{ inputs.ram_mb }}" \
-            -var="vm_disk_gb=${{ inputs.disk_gb }}" \
-            -out=destroy_plan
-
-      - name: Terraform Destroy
-        env:
-          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
-          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-          TF_VAR_ssh_public_key: ${{ secrets.ANS_SSH_PUBLIC_KEY }}
-        run: |
-          cd terraform/
-          terraform apply destroy_plan
+          # Set Proxmox credentials
+          export TF_VAR_proxmox_api_url="$PROXMOX_API_URL"
+          export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
+          echo "Destroying infrastructure for app: ${{ inputs.app_name }}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "VLAN: ${{ inputs.vlan_tag }}"
           
-          echo "✓ VM '${{ inputs.app_name }}' has been destroyed."
+          # Build destroy arguments based on deployment mode
+          DESTROY_ARGS=(
+            -auto-approve
+            -var="app_name=${{ inputs.app_name }}"
+            -var="environment=${{ inputs.environment }}"
+            -var="vlan_tag=${{ inputs.vlan_tag }}"
+            -var="vm_cpu_cores=${{ inputs.cpu_cores }}"
+            -var="vm_ram_mb=${{ inputs.ram_mb }}"
+            -var="vm_disk_gb=${{ inputs.disk_gb }}"
+            -var="resource_type=${{ inputs.resource_type }}"
+            -var="enable_tailscale_terraform=false"
+          )
+          
+          # Add instances or vm_target_ip based on mode
+          if [ -n "${{ inputs.instances }}" ]; then
+            echo "Multi-instance mode"
+            echo '${{ inputs.instances }}' > /tmp/instances.json
+            DESTROY_ARGS+=(-var="instances=$(cat /tmp/instances.json)")
+            echo "Instances to destroy:"
+            cat /tmp/instances.json | jq -r 'to_entries[] | "  \(.key): \(.value.ip_address)"'
+          else
+            echo "Single-instance mode"
+            echo "Target IP: ${{ inputs.vm_target_ip }}"
+            DESTROY_ARGS+=(-var="vm_target_ip=${{ inputs.vm_target_ip }}")
+          fi
+          echo ""
+          
+          # Terraform Destroy
+          terraform destroy "${DESTROY_ARGS[@]}"
+          echo "✓ Infrastructure destroyed successfully"
+          if [ -n "${{ inputs.instances }}" ]; then
+            echo "✓ All instances removed from Proxmox"
+          else
+            echo "✓ VM/LXC removed from Proxmox"
+          fi
+          echo "✓ Tailscale devices cleaned up (if Terraform-managed)"
+          echo "✓ Terraform state cleaned up"
+          
+          # Note about manual cleanup
+          echo ""
+          echo "📋 Manual cleanup (if needed):"
+          echo "  1. Remove Octopus Deploy targets manually if they were registered"
+          echo "  2. Check Tailscale admin console for any orphaned devices"
+          echo "  3. Verify Proxmox has no leftover resources"
+          EOF

@@ -1,0 +1,46 @@
+name: Provision LXC Docker Host Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_name:
+        description: 'Container name'
+        required: true
+        default: 'docker-host'
+
+jobs:
+  provision-lxc-docker:
+    uses: ./.github/workflows/reusable-provision.yml
+    with:
+      # Resource type
+      resource_type: lxc
+      
+      # Container configuration
+      app_name: ${{ inputs.container_name }}
+      environment: 'dev'
+      vm_target_ip: 192.168.20.101
+      
+      # Resources (more for Docker workloads)
+      cpu_cores: '4'
+      ram_mb: '4096'
+      disk_gb: '20'
+      
+      # LXC-specific - NESTING ENABLED for Docker
+      lxc_template: 'local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst'
+      lxc_unprivileged: true  # Can run Docker with nesting
+      lxc_nesting: true  # Required for Docker
+      
+      # Infrastructure
+      vlan_tag: '20'
+      proxmox_node: 'pmx'
+      proxmox_storage: 'zfs-vm'
+      
+      # Octopus Deploy
+      octopus_environment: 'Development'
+      octopus_roles: 'docker-host'
+      
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}

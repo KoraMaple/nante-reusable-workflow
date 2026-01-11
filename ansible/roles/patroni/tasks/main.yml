@@ -1,0 +1,238 @@
+---
+- name: Install prerequisites for PostgreSQL repository
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: yes
+
+- name: Add PostgreSQL APT repository key
+  ansible.builtin.apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+
+- name: Add PostgreSQL APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+
+- name: Update apt cache after adding PostgreSQL repository
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install PostgreSQL and dependencies
+  ansible.builtin.apt:
+    name:
+      - postgresql-{{ postgresql_version }}
+      - postgresql-server-dev-{{ postgresql_version }}
+      - python3-pip
+      - python3-psycopg2
+      - python3-dev
+      - gcc
+      - libpq-dev
+    state: present
+
+- name: Stop and disable default PostgreSQL service
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Install Patroni and dependencies via pip
+  ansible.builtin.pip:
+    name:
+      - patroni[etcd]
+      - psycopg2-binary
+    state: present
+    executable: pip3
+    extra_args: --break-system-packages
+
+- name: Create Patroni configuration directory
+  ansible.builtin.file:
+    path: /etc/patroni
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'
+
+- name: Remove existing PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ patroni_data_dir }}"
+    state: absent
+
+- name: Create empty Patroni data directory
+  ansible.builtin.file:
+    path: "{{ patroni_data_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+
+- name: Create Patroni configuration
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: postgres
+    group: postgres
+    mode: '0600'
+  notify: restart patroni
+
+- name: Create Patroni systemd service
+  ansible.builtin.template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart patroni
+
+- name: Check etcd cluster health
+  ansible.builtin.shell: curl -sL http://{{ etcd_endpoint }}/health
+  loop: "{{ etcd_cluster_endpoints.split(',') }}"
+  loop_control:
+    loop_var: etcd_endpoint
+  register: etcd_health
+  failed_when: false
+  changed_when: false
+
+- name: Display etcd health check results
+  debug:
+    msg: "etcd endpoint {{ health_result.etcd_endpoint }} health: {{ 'OK' if (health_result.rc == 0 and '\"health\":\"true\"' in health_result.stdout) else 'FAILED' }} - Response: {{ health_result.stdout | default('no response') }}"
+  loop: "{{ etcd_health.results }}"
+  loop_control:
+    loop_var: health_result
+    label: "{{ health_result.etcd_endpoint }}"
+
+- name: Count healthy etcd nodes
+  set_fact:
+    healthy_etcd_count: "{{ etcd_health.results | selectattr('rc', 'equalto', 0) | selectattr('stdout', 'search', '\"health\":\"true\"') | list | length }}"
+
+- name: Display etcd cluster status
+  debug:
+    msg:
+      - "Healthy etcd nodes: {{ healthy_etcd_count }}/{{ etcd_health.results | length }}"
+      - "Patroni requires at least 1 healthy etcd node to start"
+
+- name: Show etcd service status if no nodes are healthy
+  ansible.builtin.command: systemctl status etcd --no-pager
+  register: etcd_service_status
+  when: healthy_etcd_count | int == 0
+  changed_when: false
+  failed_when: false
+
+- name: Display etcd service status
+  debug:
+    msg: "{{ etcd_service_status.stdout_lines }}"
+  when: healthy_etcd_count | int == 0
+
+- name: Verify at least one etcd node is healthy
+  assert:
+    that: healthy_etcd_count | int > 0
+    fail_msg: "No etcd nodes are accessible. Patroni requires etcd to be running. Check etcd service status above."
+    success_msg: "{{ healthy_etcd_count }} etcd node(s) accessible - proceeding with Patroni startup"
+
+- name: Stop existing Patroni service if running
+  ansible.builtin.systemd:
+    name: patroni
+    state: stopped
+  ignore_errors: yes
+
+- name: Clear existing cluster state from etcd DCS
+  ansible.builtin.shell: |
+    ETCDCTL_API=3 etcdctl --endpoints="{{ etcd_cluster_endpoints }}" del --prefix "{{ patroni_namespace }}{{ patroni_scope }}/"
+  run_once: true
+  failed_when: false
+  changed_when: false
+  when: inventory_hostname == ansible_play_hosts[0]
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Enable Patroni service
+  ansible.builtin.systemd:
+    name: patroni
+    enabled: yes
+
+- name: Start Patroni on first node only (to bootstrap cluster)
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  when: inventory_hostname == ansible_play_hosts[0]
+  register: patroni_start_first
+
+- name: Wait for first node to bootstrap and become leader
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:8008/leader"
+    status_code: 200
+  register: leader_check_first
+  until: leader_check_first.status == 200
+  retries: 60
+  delay: 5
+  when: inventory_hostname == ansible_play_hosts[0]
+
+- name: Display first node bootstrap status
+  debug:
+    msg: "First node has bootstrapped and is now the leader"
+  when: inventory_hostname == ansible_play_hosts[0]
+
+- name: Wait for first node leader from other nodes
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[ansible_play_hosts[0]]['ansible_default_ipv4']['address'] }}:8008/leader"
+    status_code: 200
+  register: leader_check
+  until: leader_check.status == 200
+  retries: 10
+  delay: 2
+  when: inventory_hostname != ansible_play_hosts[0]
+
+- name: Start Patroni on remaining nodes
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  when: inventory_hostname != ansible_play_hosts[0]
+  register: patroni_start_others
+
+- name: Wait a moment for Patroni to stabilize
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Check Patroni service status
+  ansible.builtin.systemd:
+    name: patroni
+  register: patroni_status
+
+- name: Display Patroni service status
+  debug:
+    msg:
+      - "Patroni service state: {{ patroni_status.status.ActiveState }}"
+      - "Patroni service enabled: {{ patroni_status.status.UnitFileState }}"
+
+- name: Wait for Patroni REST API to be ready
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:8008/health"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 5
+  failed_when: false
+
+- name: Show Patroni logs if health check failed
+  ansible.builtin.command: journalctl -u patroni -n 50 --no-pager
+  register: patroni_logs
+  when: result.status != 200
+
+- name: Display Patroni logs on failure
+  debug:
+    msg: "{{ patroni_logs.stdout_lines }}"
+  when: result.status != 200
+
+- name: Fail if Patroni is not healthy
+  fail:
+    msg: "Patroni failed to start. Check logs above for details."
+  when: result.status != 200

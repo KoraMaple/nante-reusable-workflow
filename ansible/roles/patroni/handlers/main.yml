@@ -1,0 +1,9 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: restart patroni
+  ansible.builtin.systemd:
+    name: patroni
+    state: restarted

@@ -1,0 +1,209 @@
+name: "Reusable Manual Onboarding"
+
+on:
+  workflow_call:
+    inputs:
+      target_ip:
+        type: string
+        description: 'Target IP Address'
+        required: true
+      ssh_user:
+        type: string
+        description: 'SSH User'
+        required: true
+        default: 'deploy'
+      target_hostname:
+        type: string
+        description: 'Hostname to set'
+        required: true
+      ansible_roles:
+        type: string
+        description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
+        required: false
+        default: ''
+      # Octopus Deploy configuration
+      octopus_environment:
+        type: string
+        description: 'Octopus Deploy environment (Development, Staging, Production)'
+        required: false
+        default: 'Development'
+      octopus_roles:
+        type: string
+        description: 'Comma-separated Octopus roles (e.g., web-server,nginx)'
+        required: false
+        default: ''
+      skip_octopus:
+        type: boolean
+        description: 'Skip Octopus Tentacle registration'
+        required: false
+        default: false
+    secrets:
+      DOPPLER_TOKEN:
+        required: true
+      DOPPLER_TARGET_PROJECT:
+        required: true
+      DOPPLER_TARGET_CONFIG:
+        required: true
+      GH_PAT:
+        required: true
+
+jobs:
+  onboard:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Reusable Workflow Repo
+        uses: actions/checkout@v4
+        with:
+          repository: KoraMaple/nante-reusable-workflow
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Generate Tailscale Auth Key
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Create temporary Terraform config for auth key generation
+          mkdir -p /tmp/tailscale-onboard
+          cd /tmp/tailscale-onboard
+          
+          cat > main.tf <<'TFEOF'
+          terraform {
+            required_providers {
+              tailscale = {
+                source  = "tailscale/tailscale"
+                version = "~> 0.17"
+              }
+            }
+          }
+          
+          provider "tailscale" {
+            # Uses environment variables from Doppler:
+            # TAILSCALE_OAUTH_CLIENT_ID
+            # TAILSCALE_OAUTH_CLIENT_SECRET
+            # TAILSCALE_TAILNET
+          }
+          
+          resource "tailscale_tailnet_key" "onboard_key" {
+            reusable      = true
+            ephemeral     = false
+            preauthorized = true
+            expiry        = 7776000  # 90 days
+            description   = "Onboarding key for ${{ inputs.target_hostname }}"
+          }
+          
+          output "auth_key" {
+            value     = tailscale_tailnet_key.onboard_key.key
+            sensitive = true
+          }
+          TFEOF
+          
+          # Initialize and apply
+          echo "Generating Tailscale auth key via Terraform..."
+          terraform init -no-color
+          terraform apply -auto-approve -no-color
+          
+          # Export auth key for Ansible
+          export TS_AUTHKEY=$(terraform output -raw auth_key)
+          if [ -n "$TS_AUTHKEY" ]; then
+            echo "TS_AUTHKEY=$TS_AUTHKEY" >> $GITHUB_ENV
+            echo "✓ Tailscale auth key generated"
+          else
+            echo "⚠️  Failed to generate Tailscale auth key"
+          fi
+          
+          # Cleanup
+          cd /
+          rm -rf /tmp/tailscale-onboard
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+      - name: Run Ansible with Doppler
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Setup SSH agent with key from Doppler
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          cd ansible/
+          
+          # Install requirements
+          ansible-galaxy install -r requirements.yml
+          
+          # Test connectivity
+          echo "Testing Ansible connectivity to ${{ inputs.target_ip }}..."
+          if ! ansible all -i "${{ inputs.target_ip }}," -m ping \
+            --user "${{ inputs.ssh_user }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o ConnectTimeout=10'; then
+            echo "❌ ERROR: Ansible cannot connect to VM at ${{ inputs.target_ip }}"
+            exit 1
+          fi
+          echo "✓ Ansible connectivity confirmed"
+          
+          # Parse Octopus roles from comma-separated string to JSON array
+          OCTOPUS_ROLES_JSON="[]"
+          if [ -n "${{ inputs.octopus_roles }}" ]; then
+            # Simple bash parsing - no jq needed
+            IFS=',' read -ra ROLES <<< "${{ inputs.octopus_roles }}"
+            OCTOPUS_ROLES_JSON="["
+            for i in "${!ROLES[@]}"; do
+              ROLE=$(echo "${ROLES[$i]}" | xargs)  # trim whitespace
+              if [ -n "$ROLE" ]; then
+                [ "$i" -gt 0 ] && OCTOPUS_ROLES_JSON+=","
+                OCTOPUS_ROLES_JSON+="\"$ROLE\""
+              fi
+            done
+            OCTOPUS_ROLES_JSON+="]"
+          fi
+          
+          # Export Tailscale auth key for Ansible
+          export TS_AUTHKEY="$TS_AUTHKEY"
+          
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "⚠️  WARNING: No Tailscale auth key available. Tailscale will not be configured."
+          else
+            echo "✓ Using Tailscale auth key for onboarding"
+          fi
+          
+          # Parse ansible_roles from comma-separated string to JSON array
+          ANSIBLE_ROLES_JSON="[]"
+          if [ -n "${{ inputs.ansible_roles }}" ]; then
+            IFS=',' read -ra ROLES <<< "${{ inputs.ansible_roles }}"
+            ANSIBLE_ROLES_JSON="["
+            for i in "${!ROLES[@]}"; do
+              ROLE=$(echo "${ROLES[$i]}" | xargs)  # trim whitespace
+              if [ -n "$ROLE" ]; then
+                [ "$i" -gt 0 ] && ANSIBLE_ROLES_JSON+=","
+                ANSIBLE_ROLES_JSON+="\"$ROLE\""
+              fi
+            done
+            ANSIBLE_ROLES_JSON+="]"
+          fi
+          
+          echo "Ansible roles to apply: $ANSIBLE_ROLES_JSON"
+          
+          # Run playbook with Octopus configuration
+          # Octopus Tentacle is now part of base_setup, so it runs automatically
+          ansible-playbook -i "${{ inputs.target_ip }}," site.yml \
+            --user "${{ inputs.ssh_user }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no' \
+            --extra-vars "target_hostname=${{ inputs.target_hostname }}" \
+            --extra-vars "ansible_roles=$ANSIBLE_ROLES_JSON" \
+            --extra-vars "octopus_environment=${{ inputs.octopus_environment }}" \
+            --extra-vars "octopus_roles=$OCTOPUS_ROLES_JSON"
+          
+          echo "✓ Infrastructure onboarded and configured"
+          echo "✓ Octopus Tentacle installed and registered"
+          EOF

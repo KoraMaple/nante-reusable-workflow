@@ -1,16 +1,104 @@
 ---
 - name: "Global Infrastructure Configuration"
   hosts: all
-  become: true
+  # become is controlled by workflow (--become flag)
+  # VMs: become=true (deploy user needs sudo)
+  # LXC: become=false (already running as root)
   vars:
     # We pull the authkey from the environment variable set in GitHub Action
     ts_authkey: "{{ lookup('env', 'TS_AUTHKEY') }}"
     oo_user: "{{ lookup('env', 'OO_USER') }}"
     oo_pass: "{{ lookup('env', 'OO_PASS') }}"
-    oo_host: "{{ lookup('env', 'OO_HOST') }}"
+    # Sanitize OO_HOST to ensure it's just the IP/Hostname (strip http://, https://, and :port)
+    oo_host: "{{ lookup('env', 'OO_HOST') | regex_replace('^https?://', '') | regex_replace(':[0-9]+$', '') }}"
+    
+    # Octopus Deploy configuration (from environment)
+    octopus_server_url: "{{ lookup('env', 'OCTOPUS_SERVER_URL') }}"
+    octopus_api_key: "{{ lookup('env', 'OCTOPUS_API_KEY') }}"
+    octopus_space_id: "{{ lookup('env', 'OCTOPUS_SPACE_ID') | default('Spaces-1', true) }}"
+    octopus_environment: "{{ lookup('env', 'OCTOPUS_ENVIRONMENT') | default('Development', true) }}"
+    # octopus_roles can be passed as extra-vars from workflow (list format)
+    # ansible_roles is a list of roles to apply (passed from workflow)
+    
+    # Patroni/PostgreSQL passwords (from Doppler via environment)
+    patroni_superuser_password: "{{ lookup('env', 'PATRONI_SUPERUSER_PASSWORD') | default('changeme_superuser', true) }}"
+    patroni_admin_password: "{{ lookup('env', 'PATRONI_ADMIN_PASSWORD') | default('changeme_admin', true) }}"
+    patroni_replication_password: "{{ lookup('env', 'PATRONI_REPLICATION_PASSWORD') | default('changeme_replication', true) }}"
+    
   
-  roles:
-    - role: base_setup
-    # This role only runs if you pass an app_role_name from GitHub
-    - role: "{{ app_role_name }}"
-      when: app_role_name is defined and app_role_name != ""
+  tasks:
+    # Debug what we received from workflow
+    - name: Debug input variables
+      debug:
+        msg:
+          - "vm_hostnames_json defined: {{ vm_hostnames_json is defined }}"
+          - "vm_hostnames_json value: {{ vm_hostnames_json | default('NOT SET') }}"
+          - "target_hostname defined: {{ target_hostname is defined }}"
+          - "target_hostname value: {{ target_hostname | default('NOT SET') }}"
+          - "TS_AUTHKEY env: {{ lookup('env', 'TS_AUTHKEY') | default('NOT SET') }}"
+      run_once: true
+    
+    # In multi-instance mode, we need to map each host to its hostname
+    # The workflow passes vm_hostnames_json as a map: {"node1": "patroni-prod-node1", "node2": "patroni-prod-node2"}
+    # We'll use the inventory position to assign hostnames in order
+    - name: Assign hostname from multi-instance JSON
+      set_fact:
+        target_hostname: "{{ ((vm_hostnames_json | from_json).values() | list)[ansible_play_hosts.index(inventory_hostname)] }}"
+      when:
+        - target_hostname is not defined or target_hostname == ''
+        - vm_hostnames_json is defined
+        - vm_hostnames_json != ''
+        - vm_hostnames_json != '{}'
+    
+    - name: Use inventory hostname as fallback
+      set_fact:
+        target_hostname: "{{ inventory_hostname }}"
+      when: target_hostname is not defined or target_hostname == ''
+    
+    - name: Debug hostname assignment
+      debug:
+        msg: "Host {{ inventory_hostname }} (position {{ ansible_play_hosts.index(inventory_hostname) }}) assigned hostname: {{ target_hostname }}"
+    
+    # Run base_setup by default unless mgmt-docker is in the roles list
+    # (mgmt-docker handles its own complete Alloy config and replaces base_setup)
+    - name: Apply base_setup role
+      include_role:
+        name: base_setup
+      when: ansible_roles is not defined or 'mgmt-docker' not in ansible_roles
+    
+    # Configure LDAP client on all VMs/CTs (except FreeIPA server itself)
+    - name: Apply ldap-config role
+      include_role:
+        name: ldap-config
+      when: 
+        - ansible_roles is not defined or 'freeipa' not in ansible_roles
+        - freeipa_admin_password is defined
+    
+    # Apply all roles from ansible_roles list
+    # Special handling for etcd and patroni roles which need cluster topology
+    - name: Build cluster configuration for etcd and patroni
+      set_fact:
+        etcd_node_name: "{{ target_hostname }}"
+        etcd_initial_cluster: "{% for host in ansible_play_hosts %}{{ hostvars[host]['target_hostname'] }}=http://{{ host }}:2380{% if not loop.last %},{% endif %}{% endfor %}"
+        etcd_cluster_endpoints: "{% for host in ansible_play_hosts %}{{ host }}:2379{% if not loop.last %},{% endif %}{% endfor %}"
+        patroni_node_name: "{{ target_hostname }}"
+      when:
+        - ansible_roles is defined
+        - "'etcd' in ansible_roles or 'patroni' in ansible_roles"
+    
+    - name: Debug cluster configuration
+      debug:
+        msg:
+          - "etcd node name: {{ etcd_node_name | default('NOT SET') }}"
+          - "etcd initial cluster: {{ etcd_initial_cluster | default('NOT SET') }}"
+          - "etcd cluster endpoints: {{ etcd_cluster_endpoints | default('NOT SET') }}"
+          - "patroni node name: {{ patroni_node_name | default('NOT SET') }}"
+      when:
+        - ansible_roles is defined
+        - "'etcd' in ansible_roles or 'patroni' in ansible_roles"
+    
+    - name: Apply custom roles
+      include_role:
+        name: "{{ item }}"
+      loop: "{{ ansible_roles | default([]) }}"
+      when: ansible_roles is defined and ansible_roles | length > 0

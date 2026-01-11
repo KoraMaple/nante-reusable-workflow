@@ -1,0 +1,143 @@
+---
+# LDAP Client Configuration for FreeIPA
+# This role configures servers to authenticate against FreeIPA
+
+- name: Get hostname from server if target_hostname is not set
+  command: hostname -s
+  register: server_hostname
+  changed_when: false
+  when: target_hostname is not defined or target_hostname == ''
+
+- name: Set FreeIPA client facts
+  set_fact:
+    freeipa_server: "{{ freeipa_server_hostname | default('freeipa-dev-7ee9.tail09bdcf.ts.net') }}"
+    freeipa_domain: "tail09bdcf.ts.net"
+    freeipa_realm: "TAIL09BDCF.TS.NET"
+    # Use target_hostname from workflow, or fall back to server's hostname
+    effective_hostname: "{{ target_hostname if (target_hostname is defined and target_hostname != '') else server_hostname.stdout }}"
+    # Construct full hostname for FreeIPA enrollment
+    freeipa_client_hostname: "{{ (target_hostname if (target_hostname is defined and target_hostname != '') else server_hostname.stdout) }}.{{ freeipa_domain }}"
+
+- name: Debug FreeIPA enrollment variables
+  debug:
+    msg:
+      - "FreeIPA Server: {{ freeipa_server }}"
+      - "FreeIPA Domain: {{ freeipa_domain }}"
+      - "Target Hostname (from workflow): {{ target_hostname | default('NOT SET') }}"
+      - "Effective Hostname: {{ effective_hostname }}"
+      - "Client Hostname: {{ freeipa_client_hostname }}"
+      - "Admin Password Set: {{ 'yes' if freeipa_admin_password is defined else 'no' }}"
+
+- name: Update /etc/hosts with FreeIPA server
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ freeipa_server_ip }} {{ freeipa_server }}"
+    state: present
+  when: freeipa_server_ip is defined
+
+- name: Install FreeIPA client packages (Debian/Ubuntu)
+  apt:
+    name:
+      - freeipa-client
+      - sssd
+      - sssd-tools
+      - libnss-sss
+      - libpam-sss
+      - oddjob-mkhomedir
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install FreeIPA client packages (RHEL/CentOS)
+  dnf:
+    name:
+      - ipa-client
+      - sssd
+      - sssd-tools
+      - oddjob-mkhomedir
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Check if already enrolled in FreeIPA
+  stat:
+    path: /etc/ipa/default.conf
+  register: ipa_enrolled
+
+- name: Enroll client with FreeIPA
+  command: >
+    ipa-client-install
+    --server={{ freeipa_server }}
+    --domain={{ freeipa_domain }}
+    --realm={{ freeipa_realm }}
+    --principal=admin
+    --password={{ freeipa_admin_password }}
+    --hostname={{ freeipa_client_hostname }}
+    --mkhomedir
+    --no-ntp
+    --unattended
+  when: 
+    - not ipa_enrolled.stat.exists
+    - freeipa_admin_password is defined
+    - freeipa_client_hostname is defined
+    - freeipa_client_hostname != '.tail09bdcf.ts.net'
+  register: ipa_client_install
+
+- name: Display enrollment result
+  debug:
+    msg: "{{ ipa_client_install.stdout_lines }}"
+  when: ipa_client_install.changed
+
+- name: Ensure SSSD is started and enabled
+  systemd:
+    name: sssd
+    state: started
+    enabled: yes
+
+- name: Configure PAM to create home directories (Debian/Ubuntu)
+  lineinfile:
+    path: /etc/pam.d/common-session
+    line: "session required pam_mkhomedir.so skel=/etc/skel umask=0077"
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Configure PAM to create home directories (RHEL/CentOS)
+  lineinfile:
+    path: /etc/pam.d/system-auth
+    line: "session required pam_oddjob_mkhomedir.so skel=/etc/skel umask=0077"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Configure sudoers for SSSD
+  lineinfile:
+    path: /etc/nsswitch.conf
+    regexp: '^sudoers:'
+    line: 'sudoers: files sss'
+    state: present
+
+- name: Restart SSSD to apply changes
+  systemd:
+    name: sssd
+    state: restarted
+
+- name: Test LDAP user lookup
+  command: getent passwd admin@{{ freeipa_domain }}
+  register: ldap_test
+  changed_when: false
+  failed_when: false
+
+- name: Display LDAP configuration status
+  debug:
+    msg:
+      - "==================================================================="
+      - "LDAP Client Configuration Complete!"
+      - "==================================================================="
+      - "FreeIPA Server: {{ freeipa_server }}"
+      - "Domain: {{ freeipa_domain }}"
+      - "Realm: {{ freeipa_realm }}"
+      - ""
+      - "Users in the 'owners' group can now:"
+      - "- SSH to this server"
+      - "- Use sudo without password"
+      - ""
+      - "Test: ssh username@{{ target_hostname }}"
+      - "==================================================================="

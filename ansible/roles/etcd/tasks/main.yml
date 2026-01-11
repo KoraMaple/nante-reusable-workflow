@@ -1,0 +1,102 @@
+---
+- name: Install etcd prerequisites
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - python3-setuptools
+    state: present
+    update_cache: yes
+
+- name: Add etcd user
+  ansible.builtin.user:
+    name: etcd
+    system: yes
+    shell: /bin/false
+    home: /var/lib/etcd
+    create_home: yes
+
+- name: Create etcd directories
+  ansible.builtin.file:
+    path: "{{ etcd_dir }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: '0755'
+  loop:
+    - /etc/etcd
+    - /var/lib/etcd
+  loop_control:
+    loop_var: etcd_dir
+
+- name: Download and install etcd
+  ansible.builtin.unarchive:
+    src: "https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+    creates: /tmp/etcd-v{{ etcd_version }}-linux-amd64
+
+- name: Copy etcd binaries
+  ansible.builtin.copy:
+    src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/{{ binary }}"
+    dest: /usr/local/bin/
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - etcd
+    - etcdctl
+  loop_control:
+    loop_var: binary
+
+- name: Create etcd configuration
+  ansible.builtin.template:
+    src: etcd.conf.yml.j2
+    dest: /etc/etcd/etcd.conf.yml
+    owner: etcd
+    group: etcd
+    mode: '0644'
+  notify: restart etcd
+
+- name: Create etcd systemd service
+  ansible.builtin.template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart etcd
+
+- name: Enable and start etcd service
+  ansible.builtin.systemd:
+    name: etcd
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: Wait for etcd to be ready
+  ansible.builtin.command: curl -sL http://{{ ansible_default_ipv4.address }}:2379/health
+  register: etcd_health_check
+  until: etcd_health_check.rc == 0
+  retries: 30
+  delay: 2
+  failed_when: false
+  changed_when: false
+
+- name: Display etcd health status
+  debug:
+    msg: "etcd health check: {{ 'SUCCESS' if etcd_health_check.rc == 0 else 'FAILED' }} - Response: {{ etcd_health_check.stdout | default('no response') }}"
+
+- name: Show etcd logs if health check failed
+  ansible.builtin.command: journalctl -u etcd -n 30 --no-pager
+  register: etcd_logs
+  when: etcd_health_check.rc != 0
+  changed_when: false
+
+- name: Display etcd logs on failure
+  debug:
+    msg: "{{ etcd_logs.stdout_lines }}"
+  when: etcd_health_check.rc != 0
+
+- name: Fail if etcd is not healthy
+  fail:
+    msg: "etcd failed to start. Check logs above for details."
+  when: etcd_health_check.rc != 0

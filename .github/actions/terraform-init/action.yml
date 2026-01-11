@@ -1,0 +1,46 @@
+name: 'Terraform Init with MinIO'
+description: 'Initialize Terraform with MinIO S3 backend (reads credentials from Doppler environment)'
+
+inputs:
+  workspace:
+    description: 'Terraform workspace name (typically app_name from caller)'
+    required: true
+  minio_endpoint:
+    description: 'MinIO endpoint URL'
+    required: false
+    default: 'http://192.168.20.10:9000'
+  bucket:
+    description: 'MinIO bucket name'
+    required: false
+    default: 'terraform-state'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Terraform Init
+      shell: bash
+      run: |
+        # Verify credentials are available
+        if [ -z "$MINIO_ROOT_USER" ] || [ -z "$MINIO_ROOT_PASSWORD" ]; then
+          echo "❌ ERROR: MINIO_ROOT_USER or MINIO_ROOT_PASSWORD not found in environment"
+          echo "Ensure Doppler CLI has injected these secrets"
+          exit 1
+        fi
+        
+        cd terraform/
+        
+        # Set AWS credentials for Terraform S3 backend
+        export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+        export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+        
+        terraform init \
+          -backend-config="bucket=${{ inputs.bucket }}" \
+          -backend-config="endpoints={s3=\"${{ inputs.minio_endpoint }}\"}" \
+          -backend-config="access_key=$MINIO_ROOT_USER" \
+          -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
+
+    - name: Select Workspace
+      shell: bash
+      run: |
+        cd terraform/
+        terraform workspace select ${{ inputs.workspace }} || terraform workspace new ${{ inputs.workspace }}

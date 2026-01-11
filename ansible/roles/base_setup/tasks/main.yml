@@ -1,7 +1,32 @@
 ---
-- name: Set system hostname
+# Detect if running in LXC container
+- name: Check virtualization type
+  shell: systemd-detect-virt
+  register: virt_type
+  changed_when: false
+  failed_when: false
+
+- name: Set LXC fact
+  set_fact:
+    is_lxc: "{{ virt_type.stdout == 'lxc' }}"
+
+- name: Set OS family facts
+  set_fact:
+    is_debian: "{{ ansible_os_family == 'Debian' }}"
+    is_redhat: "{{ ansible_os_family == 'RedHat' }}"
+
+# Hostname configuration
+- name: Set system hostname (non-LXC)
   hostname:
     name: "{{ target_hostname }}"
+  when: not is_lxc
+
+- name: Set hostname directly in LXC
+  shell: |
+    echo "{{ target_hostname }}" > /etc/hostname
+    hostname "{{ target_hostname }}"
+  when: is_lxc
+  changed_when: true
 
 - name: Update /etc/hosts with new hostname
   lineinfile:
@@ -9,70 +34,307 @@
     regexp: '^127.0.1.1'
     line: "127.0.1.1 {{ target_hostname }}"
 
-- name: Install essential packages
+# Debian/Ubuntu package management
+- name: Configure apt for non-interactive mode
+  copy:
+    content: |
+      Dpkg::Options {
+         "--force-confdef";
+         "--force-confold";
+      }
+      APT::Get::Assume-Yes "true";
+      APT::Install-Recommends "false";
+    dest: /etc/apt/apt.conf.d/99-noninteractive
+    mode: '0644'
+  when: is_debian
+
+- name: Wait for apt lock to be released
+  shell: |
+    # Wait up to 5 minutes for apt locks to be released
+    TIMEOUT=300
+    ELAPSED=0
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+      if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 && \
+         ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1 && \
+         ! fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+        echo "All apt locks released"
+        exit 0
+      fi
+      echo "Waiting for apt lock... ($ELAPSED/$TIMEOUT seconds)"
+      sleep 5
+      ELAPSED=$((ELAPSED + 5))
+    done
+    echo "Timeout waiting for apt lock after $TIMEOUT seconds"
+    exit 1
+  changed_when: false
+  retries: 1
+  delay: 0
+  when: is_debian
+
+- name: Update apt cache
+  shell: apt-get update
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: false
+  retries: 3
+  delay: 10
+  when: is_debian
+
+- name: Install essential packages (Debian/Ubuntu)
   apt:
     name:
-      - qemu-guest-agent
       - curl
       - apt-transport-https
       - ca-certificates
+      - gpg
+      - unzip
     state: present
-    update_cache: yes
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: is_debian
 
-- name: Ensure QEMU Guest Agent is running
+# RHEL/Fedora package management
+- name: Install essential packages (RHEL/Fedora)
+  dnf:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg2
+      - unzip
+    state: present
+  when: is_redhat
+
+- name: Install rsyslog (non-LXC only - Debian)
+  apt:
+    name: rsyslog
+    state: present
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: not is_lxc and is_debian
+
+- name: Install rsyslog (non-LXC only - RHEL)
+  dnf:
+    name: rsyslog
+    state: present
+  when: not is_lxc and is_redhat
+
+- name: Install QEMU Guest Agent (VMs only - Debian)
+  apt:
+    name: qemu-guest-agent
+    state: present
+    force_apt_get: yes
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: virt_type.stdout in ['kvm', 'qemu'] and is_debian
+
+- name: Install QEMU Guest Agent (VMs only - RHEL)
+  dnf:
+    name: qemu-guest-agent
+    state: present
+  when: virt_type.stdout in ['kvm', 'qemu'] and is_redhat
+
+- name: Ensure QEMU Guest Agent is running (VMs only)
   service:
     name: qemu-guest-agent
     state: started
     enabled: yes
+  when: virt_type.stdout in ['kvm', 'qemu']
 
-- name: Install Tailscale
-  shell: "curl -fsSL https://tailscale.com/install.sh | sh"
-  args:
-    creates: /usr/bin/tailscale
+- name: Check if Tailscale is installed
+  command: which tailscale
+  register: tailscale_installed
+  failed_when: false
+  changed_when: false
 
-- name: Connect to Tailscale
-  command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }}"
-  environment:
-    TS_AUTHKEY: "{{ ts_authkey }}"
-  register: tailscale_result
-  changed_when: "'Success' in tailscale_result.stdout"
+- name: Check if Tailscale is connected
+  command: tailscale status --json
+  register: tailscale_status
+  failed_when: false
+  changed_when: false
+  when: tailscale_installed.rc == 0
 
-- name: Install and Configure Grafana Alloy
-  ansible.builtin.include_role:
-    name: grafana.grafana.alloy
+- name: Parse Tailscale connection status
+  set_fact:
+    tailscale_connected: "{{ (tailscale_status.stdout | from_json).BackendState == 'Running' if tailscale_status.rc == 0 else false }}"
+  when: tailscale_installed.rc == 0
+
+- name: Set Tailscale not connected if not installed
+  set_fact:
+    tailscale_connected: false
+  when: tailscale_installed.rc != 0
+
+- name: Debug Tailscale auth key
+  debug:
+    msg: "Tailscale auth key present: {{ 'yes' if ts_authkey else 'no' }}, Target hostname: {{ target_hostname }}, Connected: {{ tailscale_connected }}"
+
+- name: Install and configure Tailscale
+  when: not tailscale_connected and ts_authkey
+  block:
+    - name: Install Tailscale
+      shell: "curl -fsSL https://tailscale.com/install.sh | sh"
+      args:
+        creates: /usr/bin/tailscale
+
+    - name: Ensure tailscaled service is started
+      service:
+        name: tailscaled
+        state: started
+        enabled: yes
+
+    - name: Wait for tailscaled socket to be available
+      wait_for:
+        path: /var/run/tailscale/tailscaled.sock
+        timeout: 30
+
+    - name: Connect to Tailscale
+      command: "tailscale up --authkey={{ ts_authkey }} --hostname={{ target_hostname }} --accept-routes"
+      environment:
+        TS_AUTHKEY: "{{ ts_authkey }}"
+      register: tailscale_result
+      changed_when: "'Success' in tailscale_result.stdout or tailscale_result.rc == 0"
+      failed_when: tailscale_result.rc != 0 and 'already logged in' not in tailscale_result.stderr
+
+    - name: Debug Tailscale connection result
+      debug:
+        var: tailscale_result
+
+- name: Verify Tailscale is connected
+  when: tailscale_status is defined and tailscale_status.rc is defined and tailscale_status.rc != 0
+  block:
+    - name: Wait for Tailscale to be online
+      command: tailscale status
+      register: tailscale_check
+      until: tailscale_check.rc == 0
+      retries: 10
+      delay: 3
+      failed_when: false
+
+    - name: Show Tailscale status if failed
+      debug:
+        msg: "Tailscale status check failed. RC: {{ tailscale_check.rc }}, Output: {{ tailscale_check.stdout | default('') }}"
+      when: tailscale_check.rc != 0
+
+- name: Display Tailscale status
+  debug:
+    msg: "Tailscale is {{ 'already configured' if (tailscale_status is defined and tailscale_status.rc is defined and tailscale_status.rc == 0) else 'newly configured' }}"
+
+- name: Debug Observability Connection Vars
+  debug:
+    msg: "Connecting to Observability Stack at {{ oo_host }}"
+
+- name: Fail if Observability Host is missing
+  fail:
+    msg: "OO_HOST is not defined. Cannot configure Grafana Alloy."
+  when: oo_host is not defined or oo_host | length == 0
+
+- name: Create alloy user with log permissions
+  user:
+    name: alloy
+    system: yes
+    groups: adm
+    append: yes
+    state: present
+
+- name: Install and Configure Grafana Alloy with Debugging
+  block:
+    - name: Include Alloy Role
+      ansible.builtin.include_role:
+        name: grafana.grafana.alloy
+  rescue:
+    - name: Get Alloy Service Logs
+      command: journalctl -u alloy -n 50 --no-pager
+      register: alloy_logs
+      ignore_errors: true
+
+    - name: Print Alloy Logs
+      debug:
+        var: alloy_logs.stdout_lines
+
+    - name: Fail execution
+      fail:
+        msg: "Alloy failed to start. See logs above for details."
   vars:
     alloy_config: |
+      // 1. Collect System Metrics (node_exporter)
       prometheus.exporter.unix "default" {}
 
+      // Add labels (hostname) to metrics
+      discovery.relabel "system_metrics" {
+        targets = prometheus.exporter.unix.default.targets
+        rule {
+          target_label = "instance"
+          replacement  = "{{ target_hostname }}"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "node_exporter"
+        }
+      }
+
       prometheus.scrape "metrics" {
-        targets    = prometheus.exporter.unix.default.targets
-        forward_to = [prometheus.remote_write.openobserve.receiver]
+        targets    = discovery.relabel.system_metrics.output
+        forward_to = [prometheus.remote_write.grafana_stack.receiver]
       }
 
-      prometheus.remote_write "openobserve" {
+      prometheus.remote_write "grafana_stack" {
         endpoint {
-          url = "http://{{ oo_host }}:5080/api/default/prometheus"
-          basic_auth {
-            username = "{{ oo_user }}"
-            password = "{{ oo_pass }}"
-          }
+          url = "http://{{ oo_host }}:9090/api/v1/write"
         }
       }
 
-      loki.source.file "system_logs" {
-        targets    = [
-          { __path__ = "/var/log/*.log" },
-          { __path__ = "/var/log/syslog" }
+      // 2. Collect System Logs
+      local.file_match "system_logs" {
+        path_targets = [
+          {
+            __path__ = "/var/log/*.log",
+            host     = "{{ target_hostname }}",
+            job      = "system",
+          },
+          {
+            __path__ = "/var/log/syslog",
+            host     = "{{ target_hostname }}",
+            job      = "system",
+          },
         ]
-        forward_to = [loki.write.openobserve.receiver]
       }
 
-      loki.write "openobserve" {
+      loki.source.file "system_scrape" {
+        targets    = local.file_match.system_logs.targets
+        forward_to = [loki.write.grafana_stack.receiver]
+      }
+
+      loki.write "grafana_stack" {
         endpoint {
-          url = "http://{{ oo_host }}:5080/api/default/loki/api/v1/push"
-          basic_auth {
-            username = "{{ oo_user }}"
-            password = "{{ oo_pass }}"
-          }
+          url = "http://{{ oo_host }}:3100/loki/api/v1/push"
         }
       }
+
+# LDAP/FreeIPA Client Configuration
+# Enroll all servers with FreeIPA for centralized authentication
+- name: Include LDAP client configuration
+  include_role:
+    name: ldap-config
+  when:
+    - freeipa_server_ip is defined
+    - freeipa_server_ip | length > 0
+    - freeipa_admin_password is defined
+    - freeipa_admin_password | length > 0
+    - target_hostname != 'freeipa'  # Don't enroll FreeIPA server with itself
+
+# Octopus Deploy Tentacle Installation
+# Every VM should be registered with Octopus for deployment orchestration
+- name: Include Octopus Tentacle installation
+  include_role:
+    name: octopus-tentacle
+  vars:
+    target_name: "{{ target_hostname }}"
+    octopus_environment: "{{ octopus_environment | default('Development') }}"
+    target_roles: "{{ octopus_roles | default([]) }}"
+  when: 
+    - not (skip_octopus | default(false) | bool)
+    - octopus_server_url is defined
+    - octopus_server_url | length > 0
+    - octopus_api_key is defined
+    - octopus_api_key | length > 0

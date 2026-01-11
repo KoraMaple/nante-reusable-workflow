@@ -1,0 +1,8 @@
+---
+postgresql_version: "15"
+patroni_scope: "postgres-cluster"
+patroni_namespace: "/service/"
+patroni_data_dir: "/var/lib/postgresql/15/main"
+patroni_superuser_password: "changeme_superuser"
+patroni_admin_password: "changeme_admin"
+patroni_replication_password: "changeme_replication"

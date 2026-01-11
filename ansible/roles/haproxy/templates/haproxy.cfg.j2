@@ -1,0 +1,50 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    timeout connect 5000
+    timeout client  50000
+    timeout server  50000
+
+# HAProxy stats page
+listen stats
+    mode http
+    bind *:7000
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats show-legends
+    stats show-node
+
+# PostgreSQL Primary (read-write)
+listen postgres_primary
+    bind *:5000
+    mode tcp
+    option httpchk GET /
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for backend in patroni_backends_parsed %}
+    server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
+{% endfor %}
+
+# PostgreSQL Replicas (read-only)
+listen postgres_replicas
+    bind *:5001
+    mode tcp
+    option httpchk GET /replica
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for backend in patroni_backends_parsed %}
+    server {{ backend.name }} {{ backend.ip }}:5432 maxconn 100 check port 8008
+{% endfor %}

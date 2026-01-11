@@ -1,0 +1,269 @@
+---
+# Octopus Tentacle installation and configuration
+
+- name: Validate Octopus Server URL is set
+  fail:
+    msg: "OCTOPUS_SERVER_URL is not defined. Cannot configure Octopus Tentacle."
+  when: octopus_server_url is not defined or octopus_server_url | length == 0
+
+- name: Validate Octopus API Key is set
+  fail:
+    msg: "OCTOPUS_API_KEY is not defined. Cannot configure Octopus Tentacle."
+  when: octopus_api_key is not defined or octopus_api_key | length == 0
+
+- name: Install required packages
+  apt:
+    name:
+      - curl
+      - jq
+      - libicu-dev
+    state: present
+    update_cache: yes
+
+- name: Create Octopus directories
+  file:
+    path: "{{ octopus_dir }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ tentacle_install_dir }}"
+    - "{{ tentacle_app_dir }}"
+    - "{{ tentacle_config_dir }}"
+  loop_control:
+    loop_var: octopus_dir
+
+- name: Check if Tentacle is already installed
+  stat:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+  register: tentacle_binary
+
+- name: Download Octopus Tentacle
+  get_url:
+    url: "{{ tentacle_download_url }}"
+    dest: "/tmp/tentacle-linux_x64.tar.gz"
+    mode: '0644'
+  when: not tentacle_binary.stat.exists
+
+- name: Extract Octopus Tentacle
+  unarchive:
+    src: "/tmp/tentacle-linux_x64.tar.gz"
+    dest: "{{ tentacle_install_dir }}"
+    remote_src: yes
+    extra_opts: ['--strip-components=1']
+  when: not tentacle_binary.stat.exists
+
+- name: Verify Tentacle binary exists
+  stat:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+  register: tentacle_verify
+  failed_when: not tentacle_verify.stat.exists
+
+- name: Make Tentacle executable
+  file:
+    path: "{{ tentacle_install_dir }}/Tentacle"
+    mode: '0755'
+  when: tentacle_verify.stat.exists
+
+- name: Check if Tentacle instance exists
+  command: >
+    {{ tentacle_install_dir }}/Tentacle show-configuration
+    --instance "{{ tentacle_instance_name }}"
+  register: instance_check
+  failed_when: false
+  changed_when: false
+
+- name: Create Tentacle instance
+  command: >
+    {{ tentacle_install_dir }}/Tentacle create-instance
+    --instance "{{ tentacle_instance_name }}"
+    --config "{{ tentacle_config_dir }}/{{ tentacle_instance_name }}.config"
+  when: instance_check.rc != 0
+  register: instance_create
+
+- name: Generate Tentacle certificate
+  command: >
+    {{ tentacle_install_dir }}/Tentacle new-certificate
+    --instance "{{ tentacle_instance_name }}"
+    --if-blank
+  register: cert_result
+  changed_when: "'A new certificate has been generated' in cert_result.stdout"
+  failed_when: cert_result.rc != 0 and 'already has a certificate' not in cert_result.stderr
+
+- name: Configure Tentacle
+  command: >
+    {{ tentacle_install_dir }}/Tentacle configure
+    --instance "{{ tentacle_instance_name }}"
+    --home "{{ tentacle_install_dir }}"
+    --app "{{ tentacle_app_dir }}"
+    --port "{{ tentacle_port }}"
+    --noListen "{{ 'True' if tentacle_communication_mode == 'Polling' else 'False' }}"
+  register: tentacle_configure
+  changed_when: tentacle_configure.rc == 0
+
+- name: Debug Octopus registration variables
+  debug:
+    msg:
+      - "Target name: {{ target_name }}"
+      - "Environment: {{ octopus_environment }}"
+      - "Roles: {{ target_roles }}"
+      - "Space ID: {{ octopus_space_id }}"
+      - "Communication mode: {{ tentacle_communication_mode }}"
+
+- name: Register Tentacle with Octopus Server (Polling mode)
+  command: >
+    {{ tentacle_install_dir }}/Tentacle register-with
+    --instance "{{ tentacle_instance_name }}"
+    --server "{{ octopus_server_url }}"
+    --apiKey "{{ octopus_api_key }}"
+    --name "{{ target_name }}"
+    --space "{{ octopus_space_id }}"
+    --environment "{{ octopus_environment }}"
+    --comms-style "TentacleActive"
+    {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
+    {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
+  when: tentacle_communication_mode == "Polling"
+  register: tentacle_register
+  changed_when: "'already exists' not in tentacle_register.stdout and 'already exists' not in tentacle_register.stderr"
+  failed_when: false  # Never fail, handle errors below
+
+- name: Check for license limit error (Polling mode)
+  set_fact:
+    octopus_license_exceeded: "{{ 'exceed the limits of your current license' in tentacle_register.stderr or 'exceed the limits of your current license' in tentacle_register.stdout }}"
+  when: 
+    - tentacle_communication_mode == "Polling"
+    - tentacle_register.rc != 0
+
+- name: Display license limit warning (Polling mode)
+  debug:
+    msg:
+      - "⚠️  WARNING: Octopus Deploy license limit reached"
+      - "Cannot register '{{ target_name }}' - license capacity exceeded"
+      - "Contact sales@octopus.com to upgrade your license"
+      - "Tentacle installation will be rolled back"
+  when:
+    - tentacle_communication_mode == "Polling"
+    - tentacle_register.rc != 0
+    - octopus_license_exceeded | default(false)
+
+- name: Display registration result (on other failures)
+  debug:
+    msg:
+      - "Return code: {{ tentacle_register.rc }}"
+      - "Command failed during Octopus registration"
+      - "Check Octopus server connectivity and API key validity"
+  when: 
+    - tentacle_communication_mode == "Polling"
+    - tentacle_register.rc != 0
+    - not (octopus_license_exceeded | default(false))
+
+- name: Register Tentacle with Octopus Server (Listening mode)
+  command: >
+    {{ tentacle_install_dir }}/Tentacle register-with
+    --instance "{{ tentacle_instance_name }}"
+    --server "{{ octopus_server_url }}"
+    --apiKey "{{ octopus_api_key }}"
+    --name "{{ target_name }}"
+    --space "{{ octopus_space_id }}"
+    --environment "{{ octopus_environment }}"
+    --comms-style "TentaclePassive"
+    --publicHostName "{{ ansible_default_ipv4.address }}"
+    {{ '--role "' + (target_roles | join('" --role "')) + '"' if target_roles is defined and target_roles | length > 0 else '' }}
+    {{ '--tenant "' + (target_tenants | join('" --tenant "')) + '"' if target_tenants is defined and target_tenants | length > 0 else '' }}
+  when: tentacle_communication_mode == "Listening"
+  no_log: true
+  register: tentacle_register_listening
+  changed_when: "'already exists' not in tentacle_register_listening.stdout and 'already exists' not in tentacle_register_listening.stderr"
+  failed_when: false  # Never fail, handle errors below
+
+- name: Check for license limit error (Listening mode)
+  set_fact:
+    octopus_license_exceeded: "{{ 'exceed the limits of your current license' in tentacle_register_listening.stderr or 'exceed the limits of your current license' in tentacle_register_listening.stdout }}"
+  when: 
+    - tentacle_communication_mode == "Listening"
+    - tentacle_register_listening.rc != 0
+
+- name: Display license limit warning (Listening mode)
+  debug:
+    msg:
+      - "⚠️  WARNING: Octopus Deploy license limit reached"
+      - "Cannot register '{{ target_name }}' - license capacity exceeded"
+      - "Contact sales@octopus.com to upgrade your license"
+      - "Tentacle installation will be rolled back"
+  when:
+    - tentacle_communication_mode == "Listening"
+    - tentacle_register_listening.rc != 0
+    - octopus_license_exceeded | default(false)
+
+- name: Display registration result (on other failures - Listening)
+  debug:
+    msg:
+      - "Return code: {{ tentacle_register_listening.rc }}"
+      - "Command failed during Octopus registration"
+      - "Check Octopus server connectivity and API key validity"
+  when: 
+    - tentacle_communication_mode == "Listening"
+    - tentacle_register_listening.rc != 0
+    - not (octopus_license_exceeded | default(false))
+
+- name: Deregister Tentacle if license limit exceeded
+  command: >
+    {{ tentacle_install_dir }}/Tentacle deregister-from
+    --instance "{{ tentacle_instance_name }}"
+    --server "{{ octopus_server_url }}"
+    --apiKey "{{ octopus_api_key }}"
+  when: octopus_license_exceeded | default(false)
+  register: tentacle_deregister
+  failed_when: false
+  ignore_errors: yes
+
+- name: Remove Tentacle instance if license limit exceeded
+  command: >
+    {{ tentacle_install_dir }}/Tentacle delete-instance
+    --instance "{{ tentacle_instance_name }}"
+  when: octopus_license_exceeded | default(false)
+  register: tentacle_delete
+  failed_when: false
+  ignore_errors: yes
+
+- name: Set registration success flag
+  set_fact:
+    tentacle_registered_successfully: "{{ (tentacle_register.rc == 0 if tentacle_communication_mode == 'Polling' else tentacle_register_listening.rc == 0) and not (octopus_license_exceeded | default(false)) }}"
+
+- name: Install Tentacle systemd service
+  command: >
+    {{ tentacle_install_dir }}/Tentacle service
+    --instance "{{ tentacle_instance_name }}"
+    --install
+  register: service_install
+  changed_when: "'already installed' not in service_install.stdout"
+  failed_when: 
+    - service_install.rc != 0
+    - "'already installed' not in service_install.stdout"
+  when: tentacle_registered_successfully
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  when: tentacle_registered_successfully
+
+- name: Ensure Tentacle service is enabled and started
+  systemd:
+    name: "{{ tentacle_instance_name }}"
+    enabled: yes
+    state: started
+  when: tentacle_registered_successfully
+
+- name: Display Tentacle registration status (success)
+  debug:
+    msg: "✓ Tentacle registered as '{{ target_name }}' in environment '{{ octopus_environment }}'"
+  when: tentacle_registered_successfully
+
+- name: Display Tentacle registration status (skipped due to license)
+  debug:
+    msg: "⚠️  Tentacle registration skipped for '{{ target_name }}' - Octopus license limit reached"
+  when: not tentacle_registered_successfully and (octopus_license_exceeded | default(false))
+
+- name: Display Tentacle registration status (failed for other reason)
+  debug:
+    msg: "❌ Tentacle registration failed for '{{ target_name }}' - check logs above for details"
+  when: not tentacle_registered_successfully and not (octopus_license_exceeded | default(false))

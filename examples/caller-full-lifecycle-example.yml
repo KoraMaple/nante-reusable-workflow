@@ -1,0 +1,59 @@
+# Example: Complete workflow showing bootstrap → onboard sequence
+# This demonstrates the full lifecycle for existing infrastructure
+
+name: Full Lifecycle - Bootstrap and Configure
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'IP address of existing VM'
+        required: true
+        type: string
+      target_hostname:
+        description: 'Hostname to set'
+        required: true
+        type: string
+      app_role:
+        description: 'Application role (e.g., nginx)'
+        required: false
+        type: string
+        default: ''
+      needs_bootstrap:
+        description: 'Does VM need deploy user created?'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  # Step 1: Bootstrap (only if needed)
+  bootstrap:
+    name: Bootstrap Deploy User
+    if: ${{ inputs.needs_bootstrap }}
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-bootstrap.yml@develop
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: 'root'
+      ssh_password_secret_name: 'BOOTSTRAP_SSH_PASSWORD'
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+
+  # Step 2: Onboard and configure
+  onboard:
+    name: Configure VM with Ansible
+    needs: [bootstrap]
+    if: ${{ always() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped') }}
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: 'deploy'
+      target_hostname: ${{ inputs.target_hostname }}
+      app_role: ${{ inputs.app_role }}
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}

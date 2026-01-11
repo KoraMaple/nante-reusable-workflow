@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: KoraMaple
+  description: Install and configure Octopus Deploy Tentacle agent
+  license: MIT
+  min_ansible_version: '2.9'
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+  galaxy_tags:
+    - octopus
+    - deployment
+    - cd
+    - automation
+
+dependencies: []

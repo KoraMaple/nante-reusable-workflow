@@ -1,0 +1,46 @@
+name: Provision Privileged LXC Container Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_name:
+        description: 'Container name'
+        required: true
+        default: 'privileged-app'
+
+jobs:
+  provision-privileged-lxc:
+    uses: ./.github/workflows/reusable-provision.yml
+    with:
+      # Resource type
+      resource_type: lxc
+      
+      # Container configuration
+      app_name: ${{ inputs.container_name }}
+      environment: 'dev'
+      vm_target_ip: 192.168.20.102
+      
+      # Resources
+      cpu_cores: '2'
+      ram_mb: '2048'
+      disk_gb: '10'
+      
+      # LXC-specific - PRIVILEGED MODE
+      lxc_template: 'local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst'
+      lxc_unprivileged: false  # Run as privileged (full root access)
+      lxc_nesting: false
+      
+      # Infrastructure
+      vlan_tag: '20'
+      proxmox_node: 'pmx'
+      proxmox_storage: 'zfs-vm'
+      
+      # Octopus Deploy
+      octopus_environment: 'Development'
+      octopus_roles: 'legacy-app'
+      
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}

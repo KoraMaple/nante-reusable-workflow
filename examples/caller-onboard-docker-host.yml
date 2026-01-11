@@ -1,0 +1,29 @@
+name: Onboard Docker Host with Octopus Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'Target IP address'
+        required: true
+      hostname:
+        description: 'Hostname'
+        required: true
+        default: 'docker-mgmt'
+
+jobs:
+  onboard:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@main
+    with:
+      target_ip: ${{ inputs.target_ip }}
+      ssh_user: "deploy"
+      target_hostname: ${{ inputs.hostname }}
+      app_role: "mgmt-docker"
+      # Octopus Deploy configuration
+      octopus_environment: "Development"
+      octopus_roles: "docker-host,management"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
