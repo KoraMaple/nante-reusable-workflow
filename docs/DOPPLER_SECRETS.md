@@ -61,6 +61,39 @@ FREEIPA_ADMIN_PASSWORD=<admin-password-from-setup>
 3. Add `FREEIPA_SERVER_IP` and `FREEIPA_ADMIN_PASSWORD` to Doppler
 4. All subsequent server provisioning will automatically enroll with FreeIPA
 
+### Nexus Repository (for CI/CD artifact storage)
+```
+NEXUS_URL=http://nexus.example.com:8081
+NEXUS_USERNAME=admin
+NEXUS_PASSWORD=<nexus-password>
+```
+
+**Note**: If these are not set, artifact upload to Nexus will be skipped in CI workflows.
+
+### SonarQube/SonarCloud (for CI/CD code quality scanning)
+
+**For self-hosted SonarQube:**
+```
+SONAR_URL=http://sonar.example.com:9000
+SONAR_TOKEN=<sonarqube-token>
+```
+
+**For SonarCloud:**
+```
+SONAR_URL=https://sonarcloud.io
+SONAR_TOKEN=<sonarcloud-token>
+```
+
+**Note**: If these are not set, code scanning will be skipped in CI workflows. For SonarCloud, you also need to provide the `sonar_organization` input parameter in the workflow call.
+
+### MinIO (for Terraform state backend)
+```
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=<minio-password>
+```
+
+**Note**: Required for Terraform state management. Should be configured for all environments.
+
 ## Doppler Setup
 
 ### 1. Create Doppler Project
@@ -110,6 +143,23 @@ doppler secrets set OO_PASS="admin-password"
 # Optional: Add FreeIPA (after server setup)
 doppler secrets set FREEIPA_SERVER_IP="192.168.20.10"
 doppler secrets set FREEIPA_ADMIN_PASSWORD="generated-password"
+
+# Optional: Add Nexus (for CI/CD)
+doppler secrets set NEXUS_URL="http://nexus.example.com:8081"
+doppler secrets set NEXUS_USERNAME="admin"
+doppler secrets set NEXUS_PASSWORD="nexus-password"
+
+# Optional: Add SonarQube (for CI/CD - self-hosted)
+doppler secrets set SONAR_URL="http://sonar.example.com:9000"
+doppler secrets set SONAR_TOKEN="sonarqube-token"
+
+# Optional: Add SonarCloud (for CI/CD - cloud)
+doppler secrets set SONAR_URL="https://sonarcloud.io"
+doppler secrets set SONAR_TOKEN="sonarcloud-token"
+
+# Required: Add MinIO (for Terraform state)
+doppler secrets set MINIO_ROOT_USER="admin"
+doppler secrets set MINIO_ROOT_PASSWORD="minio-password"
 ```
 
 ### 4. Generate Service Token for GitHub Actions

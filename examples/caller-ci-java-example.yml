@@ -1,0 +1,21 @@
+name: Java Application CI Example
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: "my-java-service"
+      language: "java"
+      language_version: "17"
+      build_tool: "gradle"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets: inherit

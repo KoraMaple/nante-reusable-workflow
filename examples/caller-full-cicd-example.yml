@@ -1,0 +1,51 @@
+name: Full CI/CD Pipeline Example
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Application name'
+        required: true
+        default: 'my-app'
+      deploy_to_vm:
+        description: 'Deploy to VM after CI'
+        type: boolean
+        default: true
+
+jobs:
+  # Step 1: Build, test, and scan the application
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: ${{ inputs.app_name || 'my-app' }}
+      language: "go"
+      language_version: "1.22"
+      build_tool: "make"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets: inherit
+
+  # Step 2: Provision infrastructure (only if deploy_to_vm is true)
+  provision:
+    needs: ci
+    if: ${{ inputs.deploy_to_vm == true || github.event_name == 'push' }}
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main
+    with:
+      app_name: ${{ inputs.app_name || 'my-app' }}
+      vlan_tag: "20"
+      vm_target_ip: "192.168.20.60"
+      cpu_cores: "2"
+      ram_mb: "4096"
+      disk_gb: "20G"
+      environment: "dev"
+      ansible_roles: "nginx"
+      octopus_environment: "Development"
+      octopus_roles: "web-server,${{ inputs.app_name || 'my-app' }}"
+    secrets: inherit
+
+  # Step 3: Deploy to Octopus (future - manual for now)
+  # This would be a future workflow that triggers Octopus deployment
+  # after successful provisioning

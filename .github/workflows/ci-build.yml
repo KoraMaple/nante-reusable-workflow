@@ -1,0 +1,461 @@
+name: "Reusable CI Build"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        type: string
+        description: 'Application name for artifact naming'
+        required: true
+      language:
+        type: string
+        description: 'Programming language (go, python, node, java)'
+        required: true
+      build_tool:
+        type: string
+        description: 'Build tool override (make, gradle, maven, npm, yarn, etc.)'
+        required: false
+        default: ''
+      language_version:
+        type: string
+        description: 'Language version (e.g., "1.22" for Go, "3.11" for Python)'
+        required: false
+        default: ''
+      working_directory:
+        type: string
+        description: 'Directory to run builds in'
+        required: false
+        default: '.'
+      run_tests:
+        type: boolean
+        description: 'Whether to run tests'
+        required: false
+        default: true
+      run_sonar_scan:
+        type: boolean
+        description: 'Whether to run SonarQube/SonarCloud scan'
+        required: false
+        default: true
+      sonar_organization:
+        type: string
+        description: 'SonarCloud organization key (only for SonarCloud, leave empty for self-hosted SonarQube)'
+        required: false
+        default: ''
+      artifact_type:
+        type: string
+        description: 'Type of artifact (binary, jar, docker, etc.)'
+        required: false
+        default: ''
+      skip_nexus_upload:
+        type: boolean
+        description: 'Skip artifact upload to Nexus'
+        required: false
+        default: false
+
+jobs:
+  fetch-secrets:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    outputs:
+      NEXUS_URL: ${{ steps.get-secrets.outputs.NEXUS_URL }}
+      NEXUS_USERNAME: ${{ steps.get-secrets.outputs.NEXUS_USERNAME }}
+      NEXUS_PASSWORD: ${{ steps.get-secrets.outputs.NEXUS_PASSWORD }}
+      SONAR_URL: ${{ steps.get-secrets.outputs.SONAR_URL }}
+      SONAR_TOKEN: ${{ steps.get-secrets.outputs.SONAR_TOKEN }}
+    steps:
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Configure Doppler
+        run: |
+          doppler setup --project "$DOPPLER_TARGET_PROJECT" --config "$DOPPLER_TARGET_CONFIG" --no-interactive
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+          DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+
+      - name: Fetch secrets from Doppler
+        id: get-secrets
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          # Export secrets as outputs
+          echo "NEXUS_URL=${NEXUS_URL:-}" >> $GITHUB_OUTPUT
+          echo "NEXUS_USERNAME=${NEXUS_USERNAME:-}" >> $GITHUB_OUTPUT
+          echo "NEXUS_PASSWORD=${NEXUS_PASSWORD:-}" >> $GITHUB_OUTPUT
+          echo "SONAR_URL=${SONAR_URL:-}" >> $GITHUB_OUTPUT
+          echo "SONAR_TOKEN=${SONAR_TOKEN:-}" >> $GITHUB_OUTPUT
+          
+          # Log what was found (without values)
+          [ -n "${NEXUS_URL:-}" ] && echo "✓ NEXUS_URL found" || echo "⚠️  NEXUS_URL not found"
+          [ -n "${NEXUS_USERNAME:-}" ] && echo "✓ NEXUS_USERNAME found" || echo "⚠️  NEXUS_USERNAME not found"
+          [ -n "${NEXUS_PASSWORD:-}" ] && echo "✓ NEXUS_PASSWORD found" || echo "⚠️  NEXUS_PASSWORD not found"
+          [ -n "${SONAR_URL:-}" ] && echo "✓ SONAR_URL found" || echo "⚠️  SONAR_URL not found"
+          [ -n "${SONAR_TOKEN:-}" ] && echo "✓ SONAR_TOKEN found" || echo "⚠️  SONAR_TOKEN not found"
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    needs: fetch-secrets
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+
+      # Go Setup
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.language_version || '1.22' }}
+          cache: true
+          cache-dependency-path: ${{ inputs.working_directory }}/go.sum
+
+      - name: Install Go dependencies
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working_directory }}
+        run: go mod download
+
+      - name: Run Go tests
+        if: inputs.language == 'go' && inputs.run_tests == true
+        working-directory: ${{ inputs.working_directory }}
+        run: go test -v -coverprofile=coverage.out ./...
+
+      - name: Build Go
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'make' }}"
+          if [ "$BUILD_TOOL" == "make" ] && [ -f Makefile ]; then
+            make build
+          else
+            # Default Go build - create bin directory and build
+            mkdir -p bin
+            go build -o bin/${{ inputs.app_name }} ./...
+          fi
+
+      # Python Setup
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.language_version || '3.11' }}
+          cache: 'pip'
+          cache-dependency-path: ${{ inputs.working_directory }}/requirements.txt
+
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            pip install poetry
+            poetry install
+          elif [ "$BUILD_TOOL" == "pipenv" ]; then
+            pip install pipenv
+            pipenv install
+          else
+            # Default pip install
+            if [ -f requirements.txt ]; then
+              pip install -r requirements.txt
+            fi
+          fi
+
+      - name: Run Python tests
+        if: inputs.language == 'python' && inputs.run_tests == true
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            poetry run pytest --cov --cov-report=xml
+          elif [ "$BUILD_TOOL" == "pipenv" ]; then
+            pipenv run pytest --cov --cov-report=xml
+          else
+            # Check if pytest is available, install if needed
+            pip install pytest pytest-cov
+            pytest --cov --cov-report=xml
+          fi
+
+      - name: Build Python
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            poetry build
+          else
+            # Create dist directory for wheel/sdist
+            pip install build
+            python -m build
+          fi
+
+      # Node Setup
+      - name: Setup Node
+        if: inputs.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.language_version || '20' }}
+          cache: ${{ inputs.build_tool || 'npm' }}
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Install Node dependencies
+        if: inputs.language == 'node'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn install
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            npm install -g pnpm
+            pnpm install
+          else
+            npm ci
+          fi
+
+      - name: Run Node tests
+        if: inputs.language == 'node' && inputs.run_tests == true
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn test
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            pnpm test
+          else
+            npm test
+          fi
+
+      - name: Build Node
+        if: inputs.language == 'node'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn build
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            pnpm build
+          else
+            npm run build
+          fi
+
+      # Java Setup
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.language_version || '17' }}
+          distribution: 'temurin'
+          cache: ${{ inputs.build_tool == 'gradle' && 'gradle' || 'maven' }}
+
+      - name: Build and Test Java
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'maven' }}"
+          if [ "$BUILD_TOOL" == "gradle" ]; then
+            if [ "${{ inputs.run_tests }}" == "true" ]; then
+              ./gradlew build test
+            else
+              ./gradlew build -x test
+            fi
+          else
+            # Maven
+            if [ "${{ inputs.run_tests }}" == "true" ]; then
+              mvn clean package
+            else
+              mvn clean package -DskipTests
+            fi
+          fi
+
+      # Nexus Upload
+      - name: Upload to Nexus
+        if: inputs.skip_nexus_upload == false
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          NEXUS_URL: ${{ needs.fetch-secrets.outputs.NEXUS_URL }}
+          NEXUS_USERNAME: ${{ needs.fetch-secrets.outputs.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ needs.fetch-secrets.outputs.NEXUS_PASSWORD }}
+        run: |
+          set -e
+          
+          # Check if Nexus credentials are available
+          if [ -z "$NEXUS_URL" ] || [ -z "$NEXUS_USERNAME" ] || [ -z "$NEXUS_PASSWORD" ]; then
+            echo "⚠️  WARNING: Nexus credentials not found in Doppler"
+            echo "Skipping artifact upload. To enable, add NEXUS_URL, NEXUS_USERNAME, and NEXUS_PASSWORD to Doppler."
+            exit 0
+          fi
+          
+          VERSION="${{ github.sha }}-${{ github.run_number }}"
+          
+          # Determine artifact path based on language
+          case "${{ inputs.language }}" in
+            go)
+              ARTIFACT_PATH="bin/${{ inputs.app_name }}"
+              ;;
+            python)
+              ARTIFACT_PATH="dist/"
+              ;;
+            node)
+              ARTIFACT_PATH="dist/"
+              ;;
+            java)
+              ARTIFACT_PATH="target/*.jar"
+              ;;
+            *)
+              echo "❌ Unknown language: ${{ inputs.language }}"
+              exit 1
+              ;;
+          esac
+          
+          echo "📦 Uploading artifacts to Nexus..."
+          echo "Version: $VERSION"
+          echo "Artifact path pattern: $ARTIFACT_PATH"
+          
+          # Upload to Nexus raw repository
+          UPLOADED=0
+          for file in $ARTIFACT_PATH; do
+            if [ -f "$file" ]; then
+              echo "Uploading: $file"
+              curl -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} \
+                --upload-file "$file" \
+                "${NEXUS_URL}/repository/raw-hosted/${{ inputs.app_name }}/${VERSION}/$(basename $file)" \
+                --fail-with-body
+              echo "✓ Uploaded $(basename $file)"
+              UPLOADED=$((UPLOADED + 1))
+            elif [ -d "$ARTIFACT_PATH" ]; then
+              # If ARTIFACT_PATH is a directory, upload all files
+              for subfile in "$ARTIFACT_PATH"/*; do
+                if [ -f "$subfile" ]; then
+                  echo "Uploading: $subfile"
+                  curl -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} \
+                    --upload-file "$subfile" \
+                    "${NEXUS_URL}/repository/raw-hosted/${{ inputs.app_name }}/${VERSION}/$(basename $subfile)" \
+                    --fail-with-body
+                  echo "✓ Uploaded $(basename $subfile)"
+                  UPLOADED=$((UPLOADED + 1))
+                fi
+              done
+              break
+            fi
+          done
+          
+          if [ $UPLOADED -eq 0 ]; then
+            echo "⚠️  WARNING: No artifacts found to upload"
+            echo "Searched in: $ARTIFACT_PATH"
+            exit 0
+          fi
+          
+          echo "✓ Successfully uploaded $UPLOADED artifact(s) to Nexus"
+
+  sonar-scan:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    needs: [fetch-secrets, build]
+    if: inputs.run_sonar_scan == true
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better SonarQube analysis
+
+      # Setup language environment (needed for analysis)
+      - name: Setup Go for analysis
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.language_version || '1.22' }}
+          cache: true
+          cache-dependency-path: ${{ inputs.working_directory }}/go.sum
+
+      - name: Setup Python for analysis
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.language_version || '3.11' }}
+
+      - name: Setup Node for analysis
+        if: inputs.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.language_version || '20' }}
+
+      - name: Setup Java for analysis
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.language_version || '17' }}
+          distribution: 'temurin'
+
+      - name: SonarQube/SonarCloud Scan
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
+          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+        run: |
+          set -e
+          
+          # Check if SonarQube/SonarCloud credentials are available
+          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
+            echo "⚠️  WARNING: SonarQube/SonarCloud credentials not found in Doppler"
+            echo "Skipping code scan. To enable:"
+            echo "  - Self-hosted SonarQube: Add SONAR_URL and SONAR_TOKEN to Doppler"
+            echo "  - SonarCloud: Set SONAR_URL=https://sonarcloud.io and add SONAR_TOKEN to Doppler"
+            exit 0
+          fi
+          
+          echo "🔍 Running SonarQube/SonarCloud scan..."
+          
+          # Install sonar-scanner if not available
+          if ! command -v sonar-scanner &> /dev/null; then
+            echo "Installing sonar-scanner..."
+            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+            unzip -q sonar-scanner-cli-5.0.1.3006-linux.zip
+            export PATH="$PWD/sonar-scanner-5.0.1.3006-linux/bin:$PATH"
+            echo "✓ sonar-scanner installed"
+          fi
+          
+          # Prepare language-specific parameters
+          EXTRA_PARAMS=""
+          case "${{ inputs.language }}" in
+            go)
+              # Add Go coverage if available
+              if [ -f "coverage.out" ]; then
+                EXTRA_PARAMS="-Dsonar.go.coverage.reportPaths=coverage.out"
+              fi
+              ;;
+            python)
+              # Add Python coverage if available
+              if [ -f "coverage.xml" ]; then
+                EXTRA_PARAMS="-Dsonar.python.coverage.reportPaths=coverage.xml"
+              fi
+              ;;
+            java)
+              # Maven/Gradle generate coverage automatically
+              if [ -d "target/site/jacoco" ]; then
+                EXTRA_PARAMS="-Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml"
+              fi
+              ;;
+          esac
+          
+          # Add SonarCloud organization if provided
+          if [ -n "${{ inputs.sonar_organization }}" ]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS -Dsonar.organization=${{ inputs.sonar_organization }}"
+            echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
+          fi
+          
+          # Run scan
+          sonar-scanner \
+            -Dsonar.projectKey=${{ inputs.app_name }} \
+            -Dsonar.projectName="${{ inputs.app_name }}" \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=${SONAR_HOST_URL} \
+            -Dsonar.login=${SONAR_TOKEN} \
+            -Dsonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
+            -Dsonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
+            $EXTRA_PARAMS
+          
+          echo "✓ SonarQube/SonarCloud scan completed"
+          echo "📊 View results at: ${SONAR_HOST_URL}/dashboard?id=${{ inputs.app_name }}"

@@ -1,0 +1,20 @@
+name: Node.js Application CI Example
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: "my-node-api"
+      language: "node"
+      language_version: "20"
+      build_tool: "yarn"
+      run_tests: true
+      run_sonar_scan: true
+    secrets: inherit
