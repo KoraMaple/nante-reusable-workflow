@@ -52,12 +52,28 @@
       - "Domain: {{ freeipa_domain }}"
       - "Realm: {{ freeipa_realm }}"
       - "Admin User: admin"
-      - "Admin Password: {{ ipa_admin_password }}"
-      - "Directory Manager Password: {{ ipa_ds_password }}"
+      - "Admin Password: *** SAVED TO /root/.freeipa_admin_password ***"
+      - "Directory Manager Password: *** SAVED TO /root/.freeipa_ds_password ***"
       - "Web UI: https://{{ freeipa_hostname }}"
       - "==================================================================="
-      - "IMPORTANT: Save these credentials securely!"
+      - "IMPORTANT: Retrieve passwords from the server and save securely!"
       - "==================================================================="
+
+- name: Save admin password securely on server
+  ansible.builtin.copy:
+    content: "{{ ipa_admin_password }}"
+    dest: /root/.freeipa_admin_password
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: Save DS password securely on server
+  ansible.builtin.copy:
+    content: "{{ ipa_ds_password }}"
+    dest: /root/.freeipa_ds_password
+    mode: '0600'
+    owner: root
+    group: root
 
 - name: Update /etc/hosts with FreeIPA hostname
   lineinfile:
@@ -259,12 +275,13 @@
       - "==================================================================="
       - "Web UI: https://{{ freeipa_hostname }}"
       - "Username: admin"
-      - "Password: {{ ipa_admin_password }}"
+      - "Password: *** SAVED TO /root/.freeipa_admin_password ***"
       - ""
       - "Next Steps:"
       - "1. Access the Web UI and add users to the 'owners' group"
       - "2. Users in 'owners' group will have full sudo access on all servers"
       - "3. Configure client servers using the 'ldap-config' role"
+      - "4. Retrieve password: ssh to server, cat /root/.freeipa_admin_password"
       - ""
       - "Domain: {{ freeipa_domain }}"
       - "Realm: {{ freeipa_realm }}"

@@ -165,7 +165,7 @@
     tailscale_connected: false
   when: tailscale_installed.rc != 0
 
-- name: Debug Tailscale auth key
+- name: Debug Tailscale status
   debug:
     msg: "Tailscale auth key present: {{ 'yes' if ts_authkey else 'no' }}, Target hostname: {{ target_hostname }}, Connected: {{ tailscale_connected }}"
 
