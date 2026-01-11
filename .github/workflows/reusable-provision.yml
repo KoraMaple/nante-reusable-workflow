@@ -707,7 +707,6 @@ jobs:
           if [ -n "${{ inputs.ansible_extra_vars }}" ]; then
             echo "✓ Additional Ansible extra vars provided"
             echo "DEBUG: ansible_extra_vars = ${{ inputs.ansible_extra_vars }}"
-            echo "DEBUG: Length = ${#{{ inputs.ansible_extra_vars }}}"
           else
             echo "⚠️  No ansible_extra_vars provided"
           fi
