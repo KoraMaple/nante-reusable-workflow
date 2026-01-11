@@ -12,7 +12,9 @@
 
 - name: Parse patroni_backends from string format
   set_fact:
-    patroni_backends_parsed: >-
+    patroni_backends_parsed: "{{ patroni_backends_list }}"
+  vars:
+    patroni_backends_list: |
       {% if patroni_backends is string %}
       {% set backends = [] %}
       {% for backend in patroni_backends.split(',') %}
