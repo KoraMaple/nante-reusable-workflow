@@ -51,10 +51,25 @@ on:
         description: 'Skip artifact upload to Nexus'
         required: false
         default: false
+      runner_type:
+        type: string
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest) or "self-hosted" (uses self-hosted runner)'
+        required: false
+        default: 'self-hosted'
+      use_tailscale:
+        type: boolean
+        description: 'Connect to Tailscale network (required for GitHub-hosted runners to access internal services)'
+        required: false
+        default: false
+      tailscale_tags:
+        type: string
+        description: 'Tailscale ACL tags for the runner (comma-separated, e.g., "tag:ci,tag:build")'
+        required: false
+        default: 'tag:ci'
 
 jobs:
   fetch-secrets:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     timeout-minutes: 10
     outputs:
       NEXUS_URL: ${{ steps.get-secrets.outputs.NEXUS_URL }}
@@ -102,10 +117,18 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
   build:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     timeout-minutes: 30
     needs: fetch-secrets
     steps:
+      - name: Connect to Tailscale
+        if: inputs.use_tailscale == true
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout caller repository
         uses: actions/checkout@v4
 
@@ -355,11 +378,19 @@ jobs:
           echo "✓ Successfully uploaded $UPLOADED artifact(s) to Nexus"
 
   sonar-scan:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     timeout-minutes: 20
     needs: [fetch-secrets, build]
     if: inputs.run_sonar_scan == true
     steps:
+      - name: Connect to Tailscale
+        if: inputs.use_tailscale == true
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout caller repository
         uses: actions/checkout@v4
         with:

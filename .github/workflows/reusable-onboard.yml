@@ -37,6 +37,17 @@ on:
         description: 'Skip Octopus Tentacle registration'
         required: false
         default: false
+      # Runner configuration
+      runner_type:
+        type: string
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access)'
+        required: false
+        default: 'self-hosted'
+      tailscale_tags:
+        type: string
+        description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
+        required: false
+        default: 'tag:ci'
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -46,11 +57,25 @@ on:
         required: true
       GH_PAT:
         required: true
+      # Optional: Required for GitHub-hosted runners
+      TS_OAUTH_CLIENT_ID:
+        required: false
+      TS_OAUTH_CLIENT_SECRET:
+        required: false
 
 jobs:
   onboard:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
+      # Connect to Tailscale for GitHub-hosted runners
+      - name: Connect to Tailscale
+        if: inputs.runner_type == 'github-hosted'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout Reusable Workflow Repo
         uses: actions/checkout@v4
         with:

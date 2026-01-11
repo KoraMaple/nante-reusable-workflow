@@ -20,12 +20,26 @@ on:
         required: false
         default: true
         type: boolean
+      runner_type:
+        description: 'Runner type: "github-hosted" or "self-hosted"'
+        required: false
+        default: 'self-hosted'
+        type: string
 
 jobs:
   cleanup:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     
     steps:
+      # Connect to Tailscale for GitHub-hosted runners
+      - name: Connect to Tailscale
+        if: inputs.runner_type == 'github-hosted'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
