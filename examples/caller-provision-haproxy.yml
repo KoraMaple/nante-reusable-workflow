@@ -16,7 +16,8 @@ jobs:
       disk_gb: "15G"
       ansible_roles: haproxy
       # Pass Patroni backend IPs - replace with your actual Patroni node IPs
-      ansible_extra_vars: patroni_backends=[{'name':'patroni-ha-node1','ip':'192.168.20.70'},{'name':'patroni-ha-node2','ip':'192.168.20.71'},{'name':'patroni-ha-node3','ip':'192.168.20.72'}]
+      # Format: name:ip,name:ip,name:ip
+      ansible_extra_vars: patroni_backends=patroni-ha-node1:192.168.20.70,patroni-ha-node2:192.168.20.71,patroni-ha-node3:192.168.20.72
       lxc_unprivileged: true
       skip_octopus: true
     secrets:

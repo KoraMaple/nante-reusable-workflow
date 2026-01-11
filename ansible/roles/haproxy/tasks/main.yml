@@ -5,13 +5,27 @@
       patroni_backends variable is not defined or empty.
       You must pass Patroni backend server IPs when deploying HAProxy.
       
+      Format: comma-separated list of name:ip pairs
       Example:
-        --extra-vars "patroni_backends=[{'name':'patroni-node1','ip':'192.168.20.61'},{'name':'patroni-node2','ip':'192.168.20.62'},{'name':'patroni-node3','ip':'192.168.20.63'}]"
+        ansible_extra_vars: "patroni_backends=patroni-node1:192.168.20.61,patroni-node2:192.168.20.62,patroni-node3:192.168.20.63"
   when: patroni_backends is not defined or patroni_backends | length == 0
 
-- name: Parse patroni_backends if it's a JSON string
+- name: Parse patroni_backends from string format
   set_fact:
-    patroni_backends_parsed: "{{ patroni_backends if patroni_backends is not string else (patroni_backends | from_json) }}"
+    patroni_backends_parsed: >-
+      {% if patroni_backends is string %}
+      {% set backends = [] %}
+      {% for backend in patroni_backends.split(',') %}
+      {% set parts = backend.split(':') %}
+      {% if parts | length == 2 %}
+      {% set _ = backends.append({'name': parts[0], 'ip': parts[1]}) %}
+      {% endif %}
+      {% endfor %}
+      {{ backends }}
+      {% else %}
+      {{ patroni_backends }}
+      {% endif %}
+  when: patroni_backends is defined
 
 - name: Display Patroni backends configuration
   debug:
