@@ -1,12 +1,14 @@
-# Example: Using GitHub-Hosted Runners with Tailscale
+# Example: Using GitHub-Hosted Runners with Tailscale (Default and Recommended)
 #
-# This example shows how to use GitHub-hosted runners instead of self-hosted runners.
+# This example shows the default configuration using GitHub-hosted runners.
 # GitHub-hosted runners connect to your internal network via Tailscale VPN.
 #
 # Prerequisites:
 # 1. Tailscale OAuth Client with auth_keys scope (tag:ci)
 # 2. Tailscale ACLs configured to allow tag:ci access to Proxmox, MinIO, and target VMs
 # 3. GitHub Secrets: TS_OAUTH_CLIENT_ID, TS_OAUTH_CLIENT_SECRET
+#
+# ⚠️ Replace placeholder IP addresses with your actual configuration
 
 name: Provision with GitHub-Hosted Runner
 
@@ -22,13 +24,12 @@ on:
         required: true
         default: '20'
       vm_target_ip:
-        description: 'Target IP address'
+        description: 'Target IP address (e.g., 192.168.20.100)'
         required: true
-        default: '192.168.20.100'
 
 jobs:
   provision:
-    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@develop
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main
     with:
       app_name: ${{ github.event.inputs.app_name }}
       vlan_tag: ${{ github.event.inputs.vlan_tag }}
@@ -36,8 +37,7 @@ jobs:
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "20G"
-      # Use GitHub-hosted runner with Tailscale
-      runner_type: "github-hosted"
+      # runner_type defaults to "github-hosted" (no need to specify)
       tailscale_tags: "tag:ci"
     secrets:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
