@@ -39,6 +39,9 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$OCTOPUS_API_KEY" ]; then echo "::add-mask::$OCTOPUS_API_KEY"; fi
+          
           DAYS_OFFLINE="${{ inputs.days_offline || '7' }}"
           DRY_RUN="${{ inputs.dry_run || 'true' }}"
           

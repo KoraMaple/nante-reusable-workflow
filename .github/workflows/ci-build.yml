@@ -80,7 +80,11 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
-          # Export secrets as outputs
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$NEXUS_PASSWORD" ]; then echo "::add-mask::$NEXUS_PASSWORD"; fi
+          if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
+          
+          # Export secrets as outputs (passwords are masked above)
           echo "NEXUS_URL=${NEXUS_URL:-}" >> $GITHUB_OUTPUT
           echo "NEXUS_USERNAME=${NEXUS_USERNAME:-}" >> $GITHUB_OUTPUT
           echo "NEXUS_PASSWORD=${NEXUS_PASSWORD:-}" >> $GITHUB_OUTPUT

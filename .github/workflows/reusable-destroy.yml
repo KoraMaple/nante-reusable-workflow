@@ -92,6 +92,11 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$MINIO_ROOT_PASSWORD" ]; then echo "::add-mask::$MINIO_ROOT_PASSWORD"; fi
+          if [ -n "$PROXMOX_TOKEN_SECRET" ]; then echo "::add-mask::$PROXMOX_TOKEN_SECRET"; fi
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
+          
           cd terraform/
           
           # Set AWS credentials for Terraform S3 backend
