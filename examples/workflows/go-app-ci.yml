@@ -1,0 +1,20 @@
+name: Go Application CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-go.yml@main
+    with:
+      app_name: "my-go-app"
+      go_version: "1.22"
+      build_tool: "make"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

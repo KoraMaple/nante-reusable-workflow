@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Reusable CI/CD build workflow supporting Go, Python, Node.js, and Java
+- Doppler integration for centralized secret management
+- SonarQube code scanning integration with coverage reports
+- Nexus artifact repository upload with versioned artifacts
+- Language-specific wrapper workflows (ci-go.yml, ci-python.yml, ci-node.yml, ci-java.yml)
+- Comprehensive CI workflow documentation in README.md
+- Support for multiple build tools per language (make, maven, gradle, npm, yarn, pnpm, poetry, pipenv)
+- Automatic language environment setup with caching
+- Conditional test execution and linting
+- Language-specific coverage report generation
+
+### Features
+- ✅ Multi-language CI/CD support (Go, Python, Node.js, Java)
+- ✅ Doppler-based secret management for NEXUS and SONAR credentials
+- ✅ SonarQube integration with test coverage
+- ✅ Nexus artifact upload with SHA-based versioning
+- ✅ Modular workflow design (can skip tests, SonarQube, or Nexus upload)
+- ✅ Self-hosted runner compatible for Tailscale network access
+- ✅ Language-specific dependency caching for faster builds
+- ✅ Linting support for all languages
+
+### Documentation
+- README.md – Added comprehensive CI workflow documentation with examples
+- USAGE.md – Updated with CI workflow usage examples and Doppler setup guide
+
 ## [0.1.0-alpha] – 2025-01-22
 
 ### Added

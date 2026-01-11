@@ -1,0 +1,20 @@
+name: Java Application CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-java.yml@main
+    with:
+      app_name: "my-java-app"
+      java_version: "17"
+      build_tool: "maven"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

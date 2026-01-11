@@ -1,0 +1,40 @@
+name: Full CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # Step 1: Build and test the application
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-go.yml@main
+    with:
+      app_name: "my-app"
+      go_version: "1.22"
+      build_tool: "make"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+  # Step 2: Provision infrastructure (only on main branch)
+  provision:
+    needs: ci
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@main
+    with:
+      app_name: "my-app"
+      vlan_tag: "20"
+      vm_target_ip: "192.168.20.100"
+      cpu_cores: "4"
+      ram_mb: "8192"
+      disk_gb: "50G"
+    secrets: inherit
+
+  # Step 3: Deploy to the provisioned infrastructure
+  # Note: Add your deployment workflow here
+  # This could involve:
+  # - SSH into the VM via Tailscale
+  # - Pull the artifact from Nexus
+  # - Configure and start the application
+  # - Or use Octopus Deploy for release management
