@@ -1,0 +1,21 @@
+name: Python Application CI Example
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: "my-python-service"
+      language: "python"
+      language_version: "3.11"
+      build_tool: "poetry"
+      run_tests: true
+      run_sonar_scan: true
+      skip_nexus_upload: false
+    secrets: inherit
