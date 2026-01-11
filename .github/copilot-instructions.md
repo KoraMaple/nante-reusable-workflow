@@ -130,7 +130,7 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 
 **Configuration:**
 - **Provider:** `Telmate/proxmox`
-- **State Backend:** MinIO S3 at `http://192.168.20.10:9000`
+- **State Backend:** MinIO S3 (endpoint configured via Doppler `MINIO_ENDPOINT`)
 - **Workspace Strategy:** One workspace per application for state isolation
 - **Resources:** VMs and LXCs with multi-instance support
 
@@ -335,7 +335,7 @@ export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
 
 terraform init \
   -backend-config="bucket=terraform-state" \
-  -backend-config='endpoints={s3="http://192.168.20.10:9000"}' \
+  -backend-config='endpoints={s3="<MINIO_ENDPOINT>"}' \
   -backend-config="access_key=$MINIO_ROOT_USER" \
   -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
 ```
@@ -357,7 +357,7 @@ terraform workspace list
 terraform plan \
   -var="app_name=myapp" \
   -var="vlan_tag=20" \
-  -var="vm_target_ip=192.168.20.50" \
+  -var="vm_target_ip=<INTERNAL_IP_VLAN20>" \
   -var="resource_type=vm" \
   -var="proxmox_target_node=pmx" \
   -out=tfplan
@@ -372,7 +372,7 @@ terraform plan \
   -var="environment=prod" \
   -var="vlan_tag=10" \
   -var="resource_type=vm" \
-  -var='instances={"node1":{"ip_address":"192.168.10.51"},"node2":{"ip_address":"192.168.10.52"},"node3":{"ip_address":"192.168.10.53"}}' \
+  -var='instances={"node1":{"ip_address":"<INTERNAL_IP_VLAN10>"},"node2":{"ip_address":"<INTERNAL_IP_VLAN10>"},"node3":{"ip_address":"<INTERNAL_IP_VLAN10>"}}' \
   -out=tfplan
 
 terraform apply tfplan
@@ -388,16 +388,16 @@ cd ansible/
 ansible-galaxy install -r requirements.yml
 
 # Test connectivity
-ansible all -i "192.168.20.50," -m ping --user deploy
+ansible all -i "<INTERNAL_IP_VLAN20>," -m ping --user deploy
 
 # Run playbook with single role
-ansible-playbook -i "192.168.20.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN20>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
   --extra-vars 'ansible_roles=["nginx"]'
 
 # Run playbook with multiple roles
-ansible-playbook -i "192.168.20.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN20>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
   --extra-vars 'ansible_roles=["nginx","mgmt-docker"]'
@@ -471,7 +471,7 @@ TAILSCALE_TAILNET=-  # or your tailnet name
 TS_AUTHKEY=tskey-auth-xxxxx  # Fallback for Ansible-managed (legacy)
 
 # OpenObserve
-OO_HOST=192.168.20.10
+OO_HOST=<OPENOBSERVE_HOST>
 
 # MinIO
 MINIO_ROOT_USER=admin
@@ -512,7 +512,7 @@ GH_PAT=ghp_xxxxxxxxxxxx
 
 **MinIO:**
 - S3-compatible object storage for Terraform state
-- Endpoint: `http://192.168.20.10:9000`
+- Endpoint: Configured via Doppler `MINIO_ENDPOINT`
 - Bucket: `terraform-state`
 - Workspace isolation per application
 
@@ -557,3 +557,120 @@ GH_PAT=ghp_xxxxxxxxxxxx
 - Docker Compose deployments
 - Container registry: Nexus
 - Monitoring via `mgmt-docker` role
+
+## Security & Public Repository Guidelines
+
+### ⚠️ CRITICAL: This repository is PUBLIC
+
+All code and documentation must follow these security guidelines:
+
+### Runner Configuration
+
+**Default behavior:** All workflows use **GitHub-hosted runners** with **Tailscale** for secure network access to internal infrastructure.
+
+**For private caller repositories:** Override with:
+```yaml
+with:
+  runner_type: "self-hosted"  # ⚠️ ONLY in private repositories
+```
+
+**NEVER suggest `runner_type: "self-hosted"` for:**
+- Public repositories
+- Example code in documentation
+- Fork-based contributions
+
+### Workflow Security Patterns
+
+All workflows must include:
+
+1. **Fork PR protection:**
+   ```yaml
+   if: |
+     github.event_name != 'pull_request' ||
+     github.event.pull_request.head.repo.full_name == github.repository
+   ```
+
+2. **Comprehensive secret masking** (start of all `doppler run` blocks):
+   ```bash
+   [ -n "$SECRET_NAME" ] && echo "::add-mask::$SECRET_NAME"
+   ```
+
+3. **Parameterized endpoints** (never hardcode IPs):
+   ```bash
+   MINIO_ENDPOINT="${{ inputs.minio_endpoint }}"
+   if [ -z "$MINIO_ENDPOINT" ]; then
+     MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://minio.tailnet:9000}"
+   fi
+   ```
+
+### Secret Management
+
+All secrets via **Doppler**. The following secrets must ALWAYS be masked:
+
+**Infrastructure:**
+- `MINIO_ROOT_PASSWORD`
+- `PROXMOX_TOKEN_SECRET`
+- `SSH_PRIVATE_KEY`
+- `ANS_SSH_PUBLIC_KEY`
+
+**Networking:**
+- `TAILSCALE_OAUTH_CLIENT_SECRET`
+- `TS_AUTHKEY`
+- `TAILSCALE_AUTH_KEY`
+
+**Services:**
+- `NEXUS_PASSWORD`
+- `OCTOPUS_API_KEY`
+- `SONAR_TOKEN`
+- `FREEIPA_ADMIN_PASSWORD`
+
+**Never:**
+- Hardcode IP addresses in workflows
+- Hardcode service endpoints
+- Log sensitive values (even masked, avoid when possible)
+- Use `echo` to print secrets for debugging
+
+### Documentation Standards
+
+When writing documentation:
+
+1. **Use placeholders:**
+   ```markdown
+   Connect to MinIO at `<MINIO_HOST>:9000`
+   Or use Tailscale DNS: `minio.tailnet:9000`
+   ```
+
+2. **Provide examples in comments:**
+   ```yaml
+   vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.50
+   ```
+
+3. **Reference Doppler for secrets:**
+   ```markdown
+   Configure the endpoint in Doppler:
+   doppler secrets set MINIO_ENDPOINT="http://your-minio:9000"
+   ```
+
+4. **Never expose:**
+   - Specific internal IP addresses (use placeholders)
+   - Real hostnames or service names
+   - Network topology details
+   - Actual credentials (even expired ones)
+
+### Code Review Requirements
+
+Before merging PRs that modify workflows, verify:
+
+- [ ] `runner_type` defaults to `github-hosted`
+- [ ] Fork PR protection condition present (`if` statement)
+- [ ] All secrets are masked
+- [ ] No hardcoded IP addresses
+- [ ] Tailscale connection configured for GitHub-hosted runners
+- [ ] Workflow tested with `runner_type: github-hosted`
+
+### Security Resources
+
+- Security policy: `.github/SECURITY.md`
+- Secret configuration: `docs/DOPPLER_SECRETS.md`
+- Sanitization guide: `docs/SANITIZATION_GUIDE.md`
+- Example workflows: `examples/` (all use safe defaults)

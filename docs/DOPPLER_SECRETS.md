@@ -26,6 +26,12 @@ TAILSCALE_OAUTH_CLIENT_SECRET=tskey-client-xxxxxxxxxxxxxxxxxxxxxxxx
 TAILSCALE_TAILNET=your-tailnet-name.ts.net
 ```
 
+**Important**: The same OAuth client is used for two purposes:
+1. **GitHub-hosted runners** (via GitHub Secrets `TS_OAUTH_CLIENT_ID`/`TS_OAUTH_CLIENT_SECRET`) - connects the workflow runner to Tailscale
+2. **Terraform provider** (via Doppler) - generates auth keys for provisioned VMs to join your Tailnet
+
+These should be the same OAuth client. The client needs `devices:write` and `keys:write` scopes. Using different clients will NOT cause conflicts.
+
 ## Optional Secrets
 
 ### Octopus Deploy (for deployment orchestration)
@@ -88,11 +94,12 @@ SONAR_TOKEN=<sonarcloud-token>
 
 ### MinIO (for Terraform state backend)
 ```
+MINIO_ENDPOINT=http://minio.your-tailnet:9000
 MINIO_ROOT_USER=admin
 MINIO_ROOT_PASSWORD=<minio-password>
 ```
 
-**Note**: Required for Terraform state management. Should be configured for all environments.
+**Note**: All three are required for Terraform state management. Use a Tailscale-accessible endpoint (e.g., `http://minio.tailnet:9000`) so GitHub-hosted runners can reach it via VPN.
 
 ## Doppler Setup
 
@@ -158,6 +165,7 @@ doppler secrets set SONAR_URL="https://sonarcloud.io"
 doppler secrets set SONAR_TOKEN="sonarcloud-token"
 
 # Required: Add MinIO (for Terraform state)
+doppler secrets set MINIO_ENDPOINT="http://minio.your-tailnet:9000"
 doppler secrets set MINIO_ROOT_USER="admin"
 doppler secrets set MINIO_ROOT_PASSWORD="minio-password"
 ```
@@ -179,7 +187,13 @@ DOPPLER_TOKEN=<service-token-from-doppler>
 DOPPLER_TARGET_PROJECT=nante-infrastructure
 DOPPLER_TARGET_CONFIG=dev
 GH_PAT=<github-personal-access-token>
+
+# Required for GitHub-hosted runners (default)
+TS_OAUTH_CLIENT_ID=<same-as-TAILSCALE_OAUTH_CLIENT_ID-in-doppler>
+TS_OAUTH_CLIENT_SECRET=<same-as-TAILSCALE_OAUTH_CLIENT_SECRET-in-doppler>
 ```
+
+**Note**: `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_CLIENT_SECRET` should use the same Tailscale OAuth client as configured in Doppler. This allows both the workflow runner and Terraform to use the same OAuth client for Tailscale operations.
 
 ## Secret Validation
 

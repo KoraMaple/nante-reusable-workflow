@@ -1,3 +1,8 @@
+# ⚠️ SECURITY NOTICE:
+# This workflow defaults to GitHub-hosted runners for safety in public repositories.
+# Only use runner_type: "self-hosted" in PRIVATE repositories with trusted contributors.
+# Fork PRs will require manual approval before running infrastructure operations.
+
 name: "Reusable Manual Onboarding"
 
 on:
@@ -40,9 +45,9 @@ on:
       # Runner configuration
       runner_type:
         type: string
-        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access)'
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access). ⚠️ Use self-hosted ONLY in private repositories.'
         required: false
-        default: 'self-hosted'
+        default: 'github-hosted'
       tailscale_tags:
         type: string
         description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
@@ -66,6 +71,10 @@ on:
 jobs:
   onboard:
     runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
+    # Prevent fork PRs from running infrastructure operations - maintainers must explicitly trigger
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
@@ -97,9 +106,14 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
-          # Mask sensitive values to prevent log exposure
-          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
-          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
+          # Mask all sensitive values to prevent log exposure
+          [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ] && echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"
+          [ -n "$SSH_PRIVATE_KEY" ] && echo "::add-mask::$SSH_PRIVATE_KEY"
+          [ -n "$ANS_SSH_PUBLIC_KEY" ] && echo "::add-mask::$ANS_SSH_PUBLIC_KEY"
+          [ -n "$FREEIPA_ADMIN_PASSWORD" ] && echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"
+          [ -n "$OCTOPUS_API_KEY" ] && echo "::add-mask::$OCTOPUS_API_KEY"
+          [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
+          [ -n "$TAILSCALE_AUTH_KEY" ] && echo "::add-mask::$TAILSCALE_AUTH_KEY"
           
           # Create temporary Terraform config for auth key generation
           mkdir -p /tmp/tailscale-onboard
@@ -163,10 +177,13 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
-          # Mask sensitive values
-          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
-          if [ -n "$FREEIPA_ADMIN_PASSWORD" ]; then echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"; fi
-          if [ -n "$TS_AUTHKEY" ]; then echo "::add-mask::$TS_AUTHKEY"; fi
+          # Mask all sensitive values to prevent log exposure
+          [ -n "$SSH_PRIVATE_KEY" ] && echo "::add-mask::$SSH_PRIVATE_KEY"
+          [ -n "$ANS_SSH_PUBLIC_KEY" ] && echo "::add-mask::$ANS_SSH_PUBLIC_KEY"
+          [ -n "$FREEIPA_ADMIN_PASSWORD" ] && echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"
+          [ -n "$OCTOPUS_API_KEY" ] && echo "::add-mask::$OCTOPUS_API_KEY"
+          [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
+          [ -n "$TAILSCALE_AUTH_KEY" ] && echo "::add-mask::$TAILSCALE_AUTH_KEY"
           
           # Setup SSH agent with key from Doppler
           eval $(ssh-agent -s)

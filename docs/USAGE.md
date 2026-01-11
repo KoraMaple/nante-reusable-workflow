@@ -17,7 +17,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.100"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.100
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "20G"
@@ -43,13 +43,13 @@ Set these in your **Doppler Project**:
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `PROXMOX_API_URL` | Proxmox API endpoint | `https://192.168.1.100:8006/api2/json` |
+| `PROXMOX_API_URL` | Proxmox API endpoint | `https://<PROXMOX_HOST>:8006/api2/json` |
 | `PROXMOX_TOKEN_ID` | Proxmox API token ID | `root@pam!terraform` |
 | `PROXMOX_TOKEN_SECRET` | Proxmox API token secret | (generated in Proxmox) |
 | `ANS_SSH_PUBLIC_KEY` | Public key for cloud-init | (contents of ~/.ssh/id_rsa.pub) |
 | `SSH_PRIVATE_KEY` | Private key for Ansible | (contents of ~/.ssh/id_rsa) |
 | `TS_AUTHKEY` | Tailscale auth key | (generated in Tailscale admin) |
-| `OO_HOST` | OpenObserve host/IP | `192.168.20.5` |
+| `OO_HOST` | OpenObserve host/IP | `<OPENOBSERVE_HOST>` |
 | `OO_USER` | OpenObserve username | `admin@example.com` |
 | `OO_PASS` | OpenObserve password | (your OpenObserve password) |
 | `MINIO_ROOT_USER` | MinIO root user for Terraform state | (your MinIO root user) |
@@ -145,7 +145,7 @@ jobs:
   bootstrap:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-bootstrap.yml@develop
     with:
-      target_ip: "192.168.20.150"
+      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.150
       ssh_user: "root"  # or your existing admin user
       ssh_password_secret_name: "BOOTSTRAP_SSH_PASSWORD"
     secrets: inherit
@@ -180,7 +180,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
     with:
-      target_ip: "192.168.20.50"
+      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.50
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"
@@ -256,7 +256,7 @@ All data is tagged with consistent labels for easy filtering:
 
 ## Terraform State Management
 
-Terraform state is stored remotely in **MinIO** (S3-compatible object storage) at `http://192.168.20.10:9000`.
+Terraform state is stored remotely in **MinIO** (S3-compatible object storage). Configure the endpoint via Doppler (`MINIO_ENDPOINT`) or use the `minio_endpoint` workflow input.
 
 ### How It Works
 *   **Backend:** S3-compatible backend pointing to MinIO bucket `terraform-state`
@@ -269,13 +269,14 @@ Before running workflows, ensure:
 
 1. **Create the bucket** in MinIO:
    ```bash
-   mc alias set minio http://192.168.20.10:9000 <access_key> <secret_key>
+   mc alias set minio http://<MINIO_HOST>:9000 <access_key> <secret_key>
    mc mb minio/terraform-state
    ```
 
 2. **Add credentials to Doppler:**
    - `MINIO_ROOT_USER` - Your MinIO root user
    - `MINIO_ROOT_PASSWORD` - Your MinIO root password
+   - `MINIO_ENDPOINT` - Your MinIO endpoint (e.g., `http://minio.tailnet:9000`)
 
 ## Architecture
 
@@ -300,7 +301,7 @@ OpenObserve (Metrics)   OpenObserve (Logs)
 ## Networking
 
 - **Tailscale:** All VMs are accessed exclusively via Tailscale. No public ingress.
-- **Local Network:** VMs get static IPs on your local VLAN (e.g., `192.168.20.x`).
+- **Local Network:** VMs get static IPs on your local VLAN (e.g., `192.168.<VLAN>.x`).
 - **OpenObserve:** Metrics and logs are sent to your OpenObserve instance at `http://<OO_HOST>:5080`.
 
 ## Manual Onboarding
