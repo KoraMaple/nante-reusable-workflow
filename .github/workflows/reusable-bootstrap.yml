@@ -17,6 +17,17 @@ on:
         description: 'Name of the Doppler secret containing SSH password'
         required: true
         default: 'BOOTSTRAP_SSH_PASSWORD'
+      # Runner configuration
+      runner_type:
+        type: string
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access)'
+        required: false
+        default: 'self-hosted'
+      tailscale_tags:
+        type: string
+        description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
+        required: false
+        default: 'tag:ci'
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -26,11 +37,25 @@ on:
         required: true
       GH_PAT:
         required: true
+      # Optional: Required for GitHub-hosted runners
+      TS_OAUTH_CLIENT_ID:
+        required: false
+      TS_OAUTH_CLIENT_SECRET:
+        required: false
 
 jobs:
   bootstrap:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
+      # Connect to Tailscale for GitHub-hosted runners
+      - name: Connect to Tailscale
+        if: inputs.runner_type == 'github-hosted'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout Reusable Workflow Repo
         uses: actions/checkout@v4
         with:
@@ -67,6 +92,10 @@ jobs:
           doppler run -- bash <<'EOF'
           set -e
           
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
+          if [ -n "$ANS_SSH_PUBLIC_KEY" ]; then echo "::add-mask::$ANS_SSH_PUBLIC_KEY"; fi
+          
           # Verify sshpass is available
           if ! command -v sshpass &> /dev/null; then
             echo "❌ ERROR: sshpass is not installed"
@@ -82,10 +111,15 @@ jobs:
           SECRET_NAME="${{ inputs.ssh_password_secret_name }}"
           SSH_PASSWORD="${!SECRET_NAME}"
           
+          # Mask the SSH password
+          if [ -n "$SSH_PASSWORD" ]; then
+            echo "::add-mask::$SSH_PASSWORD"
+          fi
+          
           if [ -z "$SSH_PASSWORD" ]; then
             echo "❌ ERROR: SSH password not found in Doppler secret: $SECRET_NAME"
-            echo "Available environment variables:"
-            env | grep -v "PASSWORD\|SECRET\|TOKEN\|KEY" | sort
+            echo "Available environment variables (secrets filtered):"
+            env | grep -v "PASSWORD\|SECRET\|TOKEN\|KEY\|PRIVATE" | sort
             exit 1
           fi
           

@@ -16,12 +16,35 @@ on:
         required: false
         default: true
         type: boolean
+      runner_type:
+        description: 'Runner type: "github-hosted" or "self-hosted"'
+        required: false
+        default: 'self-hosted'
+        type: string
+      tailscale_tags:
+        description: 'Tailscale ACL tags for GitHub-hosted runner'
+        required: false
+        default: 'tag:ci'
+        type: string
+
+# Limit permissions for security
+permissions:
+  contents: read
 
 jobs:
   cleanup:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     
     steps:
+      # Connect to Tailscale for GitHub-hosted runners
+      - name: Connect to Tailscale
+        if: inputs.runner_type == 'github-hosted'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -38,6 +61,9 @@ jobs:
         run: |
           doppler run -- bash <<'EOF'
           set -e
+          
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$OCTOPUS_API_KEY" ]; then echo "::add-mask::$OCTOPUS_API_KEY"; fi
           
           DAYS_OFFLINE="${{ inputs.days_offline || '7' }}"
           DRY_RUN="${{ inputs.dry_run || 'true' }}"

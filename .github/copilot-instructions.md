@@ -223,13 +223,26 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 ### GitHub Actions Workflows
 **Purpose:** Orchestration and automation
 
-**Runner:** Self-hosted (required for Proxmox LAN access)
+**Runner Strategy:** Hybrid (GitHub-hosted + Tailscale or Self-hosted)
+
+The repository supports a hybrid runner architecture for flexibility and security:
+
+| Runner Type | Use Case | Network Access | Configuration |
+|-------------|----------|----------------|---------------|
+| **Self-hosted** (default) | Production infrastructure | Direct LAN access | `runner_type: 'self-hosted'` |
+| **GitHub-hosted + Tailscale** | CI/CD, testing | Via Tailscale VPN | `runner_type: 'github-hosted'` |
+
+**Using GitHub-Hosted Runners:**
+1. Set `runner_type: 'github-hosted'` in workflow inputs
+2. Configure `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_CLIENT_SECRET` secrets
+3. Set `tailscale_tags` for ACL-based access control (default: `tag:ci`)
 
 **Current Workflows:**
 1. **`reusable-provision.yml`**: Provision VM/LXC (single or multi-instance) + configure with Ansible
 2. **`reusable-destroy.yml`**: Destroy VM/LXC and clean up state
 3. **`reusable-onboard.yml`**: Configure existing infrastructure
 4. **`reusable-bootstrap.yml`**: Initial user setup on existing VMs
+5. **`ci-build.yml`**: Build, test, and scan applications (Go, Python, Node, Java)
 
 **Workflow Input Parameters:**
 - `resource_type`: `vm` or `lxc`
@@ -241,6 +254,8 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 - `ansible_roles`: Comma-separated list of Ansible roles to apply (e.g., `nginx,mgmt-docker`)
 - `skip_terraform`: Skip infrastructure provisioning
 - `skip_octopus`: Skip Octopus Tentacle registration
+- `runner_type`: `self-hosted` (default) or `github-hosted`
+- `tailscale_tags`: ACL tags for GitHub-hosted runners (e.g., `tag:ci`)
 
 **Ansible Role Execution:**
 - `base_setup` always runs by default (Tailscale, Alloy, system config)
@@ -252,8 +267,15 @@ See `ARCHITECTURE.md` for detailed implementation plan.
 **Design Patterns:**
 - Accept flags for modularity (`skip_terraform`, `skip_provision`)
 - Use `doppler run` for secret injection
-- All secrets from Doppler, none from GitHub Secrets (except Doppler token)
+- All secrets from Doppler, none from GitHub Secrets (except Doppler token and Tailscale OAuth)
 - Idempotent operations (safe to re-run)
+- Automatic secret masking with `::add-mask::` for log sanitization
+
+**Security Best Practices:**
+- All sensitive values are masked before use
+- No debug statements expose secrets
+- GitHub-hosted runners use ephemeral Tailscale connections
+- See `docs/SECURITY.md` for comprehensive security guidelines
 
 **Future Workflows:**
 - `reusable-provision-lxc.yml`: LXC provisioning

@@ -1,0 +1,49 @@
+# Example: Using GitHub-Hosted Runners with Tailscale
+#
+# This example shows how to use GitHub-hosted runners instead of self-hosted runners.
+# GitHub-hosted runners connect to your internal network via Tailscale VPN.
+#
+# Prerequisites:
+# 1. Tailscale OAuth Client with auth_keys scope (tag:ci)
+# 2. Tailscale ACLs configured to allow tag:ci access to Proxmox, MinIO, and target VMs
+# 3. GitHub Secrets: TS_OAUTH_CLIENT_ID, TS_OAUTH_CLIENT_SECRET
+
+name: Provision with GitHub-Hosted Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Application name'
+        required: true
+        default: 'nginx-demo'
+      vlan_tag:
+        description: 'VLAN tag'
+        required: true
+        default: '20'
+      vm_target_ip:
+        description: 'Target IP address'
+        required: true
+        default: '192.168.20.100'
+
+jobs:
+  provision:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-provision.yml@develop
+    with:
+      app_name: ${{ github.event.inputs.app_name }}
+      vlan_tag: ${{ github.event.inputs.vlan_tag }}
+      vm_target_ip: ${{ github.event.inputs.vm_target_ip }}
+      cpu_cores: "2"
+      ram_mb: "2048"
+      disk_gb: "20G"
+      # Use GitHub-hosted runner with Tailscale
+      runner_type: "github-hosted"
+      tailscale_tags: "tag:ci"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TARGET_PROJECT: ${{ secrets.DOPPLER_TARGET_PROJECT }}
+      DOPPLER_TARGET_CONFIG: ${{ secrets.DOPPLER_TARGET_CONFIG }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      # Required for GitHub-hosted runners
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}

@@ -35,7 +35,7 @@
           - "vm_hostnames_json value: {{ vm_hostnames_json | default('NOT SET') }}"
           - "target_hostname defined: {{ target_hostname is defined }}"
           - "target_hostname value: {{ target_hostname | default('NOT SET') }}"
-          - "TS_AUTHKEY env: {{ lookup('env', 'TS_AUTHKEY') | default('NOT SET') }}"
+          - "TS_AUTHKEY env: {{ 'SET' if lookup('env', 'TS_AUTHKEY') else 'NOT SET' }}"
       run_once: true
     
     # In multi-instance mode, we need to map each host to its hostname

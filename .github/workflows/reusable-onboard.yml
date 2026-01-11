@@ -37,6 +37,17 @@ on:
         description: 'Skip Octopus Tentacle registration'
         required: false
         default: false
+      # Runner configuration
+      runner_type:
+        type: string
+        description: 'Runner type: "github-hosted" (uses ubuntu-latest with Tailscale) or "self-hosted" (uses self-hosted runner with direct LAN access)'
+        required: false
+        default: 'self-hosted'
+      tailscale_tags:
+        type: string
+        description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
+        required: false
+        default: 'tag:ci'
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -46,11 +57,25 @@ on:
         required: true
       GH_PAT:
         required: true
+      # Optional: Required for GitHub-hosted runners
+      TS_OAUTH_CLIENT_ID:
+        required: false
+      TS_OAUTH_CLIENT_SECRET:
+        required: false
 
 jobs:
   onboard:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_type == 'github-hosted' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
+      # Connect to Tailscale for GitHub-hosted runners
+      - name: Connect to Tailscale
+        if: inputs.runner_type == 'github-hosted'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: ${{ inputs.tailscale_tags }}
+
       - name: Checkout Reusable Workflow Repo
         uses: actions/checkout@v4
         with:
@@ -71,6 +96,10 @@ jobs:
         run: |
           doppler run -- bash <<'EOF'
           set -e
+          
+          # Mask sensitive values to prevent log exposure
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
+          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
           
           # Create temporary Terraform config for auth key generation
           mkdir -p /tmp/tailscale-onboard
@@ -112,9 +141,10 @@ jobs:
           terraform init -no-color
           terraform apply -auto-approve -no-color
           
-          # Export auth key for Ansible
+          # Export auth key for Ansible (masked for security)
           export TS_AUTHKEY=$(terraform output -raw auth_key)
           if [ -n "$TS_AUTHKEY" ]; then
+            echo "::add-mask::$TS_AUTHKEY"
             echo "TS_AUTHKEY=$TS_AUTHKEY" >> $GITHUB_ENV
             echo "✓ Tailscale auth key generated"
           else
@@ -132,6 +162,11 @@ jobs:
         run: |
           doppler run -- bash <<'EOF'
           set -e
+          
+          # Mask sensitive values
+          if [ -n "$SSH_PRIVATE_KEY" ]; then echo "::add-mask::$SSH_PRIVATE_KEY"; fi
+          if [ -n "$FREEIPA_ADMIN_PASSWORD" ]; then echo "::add-mask::$FREEIPA_ADMIN_PASSWORD"; fi
+          if [ -n "$TS_AUTHKEY" ]; then echo "::add-mask::$TS_AUTHKEY"; fi
           
           # Setup SSH agent with key from Doppler
           eval $(ssh-agent -s)
