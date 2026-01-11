@@ -1,0 +1,499 @@
+name: "Reusable CI Build"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        type: string
+        description: 'Application name for artifact naming'
+        required: true
+      language:
+        type: string
+        description: 'Programming language (go, python, node, java)'
+        required: true
+      build_tool:
+        type: string
+        description: 'Build tool override (make, gradle, maven, npm, yarn, pnpm, poetry, pipenv)'
+        required: false
+        default: ''
+      language_version:
+        type: string
+        description: 'Language version (e.g., "1.22" for Go, "3.11" for Python, "20" for Node, "17" for Java)'
+        required: false
+        default: ''
+      working_directory:
+        type: string
+        description: 'Directory to run builds in'
+        required: false
+        default: '.'
+      run_tests:
+        type: boolean
+        description: 'Whether to run tests'
+        required: false
+        default: true
+      run_sonar_scan:
+        type: boolean
+        description: 'Whether to run SonarQube scan'
+        required: false
+        default: true
+      artifact_type:
+        type: string
+        description: 'Type of artifact (binary, jar, docker, etc.)'
+        required: false
+        default: ''
+      skip_nexus_upload:
+        type: boolean
+        description: 'Skip artifact upload to Nexus'
+        required: false
+        default: false
+    secrets:
+      DOPPLER_TOKEN:
+        description: 'Doppler token for fetching secrets'
+        required: true
+
+jobs:
+  fetch-secrets:
+    runs-on: self-hosted
+    outputs:
+      NEXUS_URL: ${{ steps.doppler.outputs.NEXUS_URL }}
+      NEXUS_USERNAME: ${{ steps.doppler.outputs.NEXUS_USERNAME }}
+      NEXUS_PASSWORD: ${{ steps.doppler.outputs.NEXUS_PASSWORD }}
+      SONAR_URL: ${{ steps.doppler.outputs.SONAR_URL }}
+      SONAR_TOKEN: ${{ steps.doppler.outputs.SONAR_TOKEN }}
+    steps:
+      - name: Install Doppler CLI
+        run: |
+          # Check if Doppler is already installed
+          if ! command -v doppler &> /dev/null; then
+            echo "Installing Doppler CLI..."
+            # Install Doppler CLI
+            curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh | sudo sh
+          else
+            echo "Doppler CLI already installed"
+          fi
+          doppler --version
+
+      - name: Fetch secrets from Doppler
+        id: doppler
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          # Fetch secrets from Doppler and set as outputs
+          echo "Fetching secrets from Doppler..."
+          
+          # Fetch each secret and set as output
+          NEXUS_URL=$(doppler secrets get NEXUS_URL --plain)
+          NEXUS_USERNAME=$(doppler secrets get NEXUS_USERNAME --plain)
+          NEXUS_PASSWORD=$(doppler secrets get NEXUS_PASSWORD --plain)
+          SONAR_URL=$(doppler secrets get SONAR_URL --plain)
+          SONAR_TOKEN=$(doppler secrets get SONAR_TOKEN --plain)
+          
+          # Set outputs (masked for security)
+          echo "NEXUS_URL=$NEXUS_URL" >> $GITHUB_OUTPUT
+          echo "NEXUS_USERNAME=$NEXUS_USERNAME" >> $GITHUB_OUTPUT
+          echo "::add-mask::$NEXUS_PASSWORD"
+          echo "NEXUS_PASSWORD=$NEXUS_PASSWORD" >> $GITHUB_OUTPUT
+          echo "SONAR_URL=$SONAR_URL" >> $GITHUB_OUTPUT
+          echo "::add-mask::$SONAR_TOKEN"
+          echo "SONAR_TOKEN=$SONAR_TOKEN" >> $GITHUB_OUTPUT
+          
+          echo "✓ Secrets fetched successfully"
+
+  build:
+    runs-on: self-hosted
+    needs: fetch-secrets
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Language Setup - Go
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.language_version || '1.22' }}
+          cache: true
+
+      # Language Setup - Python
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.language_version || '3.11' }}
+          cache: ${{ inputs.build_tool == 'poetry' && 'poetry' || 'pip' }}
+
+      # Language Setup - Node
+      - name: Setup Node
+        if: inputs.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.language_version || '20' }}
+          cache: ${{ inputs.build_tool || 'npm' }}
+
+      # Language Setup - Java
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.language_version || '17' }}
+          distribution: 'temurin'
+          cache: ${{ inputs.build_tool == 'gradle' && 'gradle' || 'maven' }}
+
+      # Install Dependencies - Go
+      - name: Install Go dependencies
+        if: inputs.language == 'go'
+        run: |
+          echo "Installing Go dependencies..."
+          go mod download
+          go mod verify
+
+      # Install Dependencies - Python
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          echo "Installing Python dependencies using $BUILD_TOOL..."
+          
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            pip install poetry
+            poetry install
+          elif [ "$BUILD_TOOL" == "pipenv" ]; then
+            pip install pipenv
+            pipenv install --dev
+          else
+            # Default to pip
+            if [ -f requirements.txt ]; then
+              pip install -r requirements.txt
+            fi
+            if [ -f requirements-dev.txt ]; then
+              pip install -r requirements-dev.txt
+            fi
+          fi
+
+      # Install Dependencies - Node
+      - name: Install Node dependencies
+        if: inputs.language == 'node'
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          echo "Installing Node dependencies using $BUILD_TOOL..."
+          
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn install
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            npm install -g pnpm
+            pnpm install
+          else
+            npm install
+          fi
+
+      # Install Dependencies - Java
+      - name: Install Java dependencies
+        if: inputs.language == 'java'
+        run: |
+          BUILD_TOOL="${{ inputs.build_tool || 'maven' }}"
+          echo "Installing Java dependencies using $BUILD_TOOL..."
+          
+          if [ "$BUILD_TOOL" == "gradle" ]; then
+            ./gradlew dependencies
+          else
+            mvn dependency:resolve
+          fi
+
+      # Linting - Go
+      - name: Lint Go code
+        if: inputs.language == 'go'
+        run: |
+          echo "Running Go linting..."
+          if command -v golangci-lint &> /dev/null; then
+            golangci-lint run
+          else
+            echo "golangci-lint not found, running go vet instead"
+            go vet ./...
+          fi
+
+      # Linting - Python
+      - name: Lint Python code
+        if: inputs.language == 'python'
+        run: |
+          echo "Running Python linting..."
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            poetry run flake8 . || echo "flake8 not configured, skipping"
+          elif [ "$BUILD_TOOL" == "pipenv" ]; then
+            pipenv run flake8 . || echo "flake8 not configured, skipping"
+          else
+            flake8 . || echo "flake8 not found, skipping linting"
+          fi
+
+      # Linting - Node
+      - name: Lint Node code
+        if: inputs.language == 'node'
+        run: |
+          echo "Running Node linting..."
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn lint || echo "No lint script found, skipping"
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            pnpm lint || echo "No lint script found, skipping"
+          else
+            npm run lint || echo "No lint script found, skipping"
+          fi
+
+      # Linting - Java
+      - name: Lint Java code
+        if: inputs.language == 'java'
+        run: |
+          echo "Running Java linting..."
+          BUILD_TOOL="${{ inputs.build_tool || 'maven' }}"
+          
+          if [ "$BUILD_TOOL" == "gradle" ]; then
+            ./gradlew checkstyleMain || echo "Checkstyle not configured, skipping"
+          else
+            mvn checkstyle:check || echo "Checkstyle not configured, skipping"
+          fi
+
+      # Tests - Go
+      - name: Run Go tests
+        if: inputs.language == 'go' && inputs.run_tests
+        run: |
+          echo "Running Go tests..."
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          
+          # Generate coverage report
+          go tool cover -html=coverage.out -o coverage.html || true
+
+      # Tests - Python
+      - name: Run Python tests
+        if: inputs.language == 'python' && inputs.run_tests
+        run: |
+          echo "Running Python tests..."
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            poetry run pytest --cov --cov-report=xml --cov-report=html || true
+          elif [ "$BUILD_TOOL" == "pipenv" ]; then
+            pipenv run pytest --cov --cov-report=xml --cov-report=html || true
+          else
+            pytest --cov --cov-report=xml --cov-report=html || true
+          fi
+
+      # Tests - Node
+      - name: Run Node tests
+        if: inputs.language == 'node' && inputs.run_tests
+        run: |
+          echo "Running Node tests..."
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn test || true
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            pnpm test || true
+          else
+            npm test || true
+          fi
+
+      # Tests - Java
+      - name: Run Java tests
+        if: inputs.language == 'java' && inputs.run_tests
+        run: |
+          echo "Running Java tests..."
+          BUILD_TOOL="${{ inputs.build_tool || 'maven' }}"
+          
+          if [ "$BUILD_TOOL" == "gradle" ]; then
+            ./gradlew test
+          else
+            mvn test
+          fi
+
+      # Build - Go
+      - name: Build Go artifact
+        if: inputs.language == 'go'
+        run: |
+          echo "Building Go artifact..."
+          BUILD_TOOL="${{ inputs.build_tool || 'go' }}"
+          
+          mkdir -p ./artifacts
+          
+          if [ "$BUILD_TOOL" == "make" ] && [ -f Makefile ]; then
+            make build
+            # Try to find the built binary
+            if [ -f "bin/${{ inputs.app_name }}" ]; then
+              cp "bin/${{ inputs.app_name }}" "./artifacts/${{ inputs.app_name }}"
+            elif [ -f "${{ inputs.app_name }}" ]; then
+              cp "${{ inputs.app_name }}" "./artifacts/${{ inputs.app_name }}"
+            fi
+          else
+            go build -o "./artifacts/${{ inputs.app_name }}" ./...
+          fi
+          
+          echo "✓ Build complete"
+          ls -lh ./artifacts/
+
+      # Build - Python
+      - name: Build Python artifact
+        if: inputs.language == 'python'
+        run: |
+          echo "Building Python artifact..."
+          BUILD_TOOL="${{ inputs.build_tool || 'pip' }}"
+          
+          mkdir -p ./artifacts
+          
+          if [ "$BUILD_TOOL" == "poetry" ]; then
+            poetry build
+            cp dist/* ./artifacts/ || true
+          else
+            # Create a source distribution
+            python setup.py sdist bdist_wheel || true
+            cp dist/* ./artifacts/ || true
+          fi
+          
+          echo "✓ Build complete"
+          ls -lh ./artifacts/
+
+      # Build - Node
+      - name: Build Node artifact
+        if: inputs.language == 'node'
+        run: |
+          echo "Building Node artifact..."
+          BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
+          
+          if [ "$BUILD_TOOL" == "yarn" ]; then
+            yarn build || echo "No build script found"
+          elif [ "$BUILD_TOOL" == "pnpm" ]; then
+            pnpm build || echo "No build script found"
+          else
+            npm run build || echo "No build script found"
+          fi
+          
+          # Package for distribution
+          mkdir -p ./artifacts
+          if [ -d "dist" ]; then
+            cp -r dist ./artifacts/
+          elif [ -d "build" ]; then
+            cp -r build ./artifacts/
+          fi
+          
+          echo "✓ Build complete"
+          ls -lh ./artifacts/
+
+      # Build - Java
+      - name: Build Java artifact
+        if: inputs.language == 'java'
+        run: |
+          echo "Building Java artifact..."
+          BUILD_TOOL="${{ inputs.build_tool || 'maven' }}"
+          
+          mkdir -p ./artifacts
+          
+          if [ "$BUILD_TOOL" == "gradle" ]; then
+            ./gradlew build
+            find build/libs -type f \( -name "*.jar" -o -name "*.war" \) -exec cp {} ./artifacts/ \;
+          else
+            mvn package
+            find target -type f \( -name "*.jar" -o -name "*.war" \) -exec cp {} ./artifacts/ \;
+          fi
+          
+          echo "✓ Build complete"
+          ls -lh ./artifacts/
+
+      # Upload to Nexus
+      - name: Upload artifacts to Nexus
+        if: inputs.skip_nexus_upload == false
+        env:
+          NEXUS_URL: ${{ needs.fetch-secrets.outputs.NEXUS_URL }}
+          NEXUS_USERNAME: ${{ needs.fetch-secrets.outputs.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ needs.fetch-secrets.outputs.NEXUS_PASSWORD }}
+        run: |
+          echo "Uploading artifacts to Nexus..."
+          
+          # Generate version string
+          VERSION="${{ github.sha }}-${{ github.run_number }}"
+          
+          # Upload each artifact
+          for artifact in ./artifacts/*; do
+            if [ -f "$artifact" ]; then
+              filename=$(basename "$artifact")
+              echo "Uploading $filename..."
+              
+              curl -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+                --upload-file "$artifact" \
+                "${NEXUS_URL}/repository/raw-hosted/${{ inputs.app_name }}/${VERSION}/${filename}" \
+                -f || echo "Failed to upload $filename"
+            fi
+          done
+          
+          echo "✓ Upload complete"
+
+  sonar-scan:
+    runs-on: self-hosted
+    needs: [fetch-secrets, build]
+    if: inputs.run_sonar_scan == true
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Shallow clones should be disabled for better relevancy of analysis
+          fetch-depth: 0
+
+      - name: Install SonarScanner
+        run: |
+          # Check if sonar-scanner is already installed
+          if ! command -v sonar-scanner &> /dev/null; then
+            echo "Installing SonarScanner..."
+            
+            # Download and install SonarScanner
+            SONAR_SCANNER_VERSION="5.0.1.3006"
+            wget -q "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
+            unzip -q "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
+            sudo mv "sonar-scanner-${SONAR_SCANNER_VERSION}-linux" /opt/sonar-scanner
+            sudo ln -sf /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner
+            rm "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip"
+          else
+            echo "SonarScanner already installed"
+          fi
+          
+          sonar-scanner --version
+
+      - name: Run SonarQube scan
+        env:
+          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
+          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+        run: |
+          echo "Running SonarQube scan..."
+          
+          # Build sonar-scanner command with common parameters
+          SONAR_ARGS="-Dsonar.projectKey=${{ inputs.app_name }} \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=${SONAR_HOST_URL} \
+            -Dsonar.login=${SONAR_TOKEN}"
+          
+          # Add language-specific parameters
+          if [ "${{ inputs.language }}" == "go" ]; then
+            # Add Go coverage if available
+            if [ -f "coverage.out" ]; then
+              SONAR_ARGS="$SONAR_ARGS -Dsonar.go.coverage.reportPaths=coverage.out"
+            fi
+          elif [ "${{ inputs.language }}" == "python" ]; then
+            # Add Python coverage if available
+            if [ -f "coverage.xml" ]; then
+              SONAR_ARGS="$SONAR_ARGS -Dsonar.python.coverage.reportPaths=coverage.xml"
+            fi
+          elif [ "${{ inputs.language }}" == "java" ]; then
+            # Add Java coverage if available
+            if [ -f "target/site/jacoco/jacoco.xml" ]; then
+              SONAR_ARGS="$SONAR_ARGS -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml"
+            fi
+          fi
+          
+          # Run the scan
+          sonar-scanner $SONAR_ARGS
+          
+          echo "✓ SonarQube scan complete"

@@ -1,0 +1,58 @@
+name: "Reusable CI Build - Go"
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        type: string
+        description: 'Application name for artifact naming'
+        required: true
+      go_version:
+        type: string
+        description: 'Go version (e.g., "1.22")'
+        required: false
+        default: '1.22'
+      build_tool:
+        type: string
+        description: 'Build tool (make or go)'
+        required: false
+        default: 'make'
+      working_directory:
+        type: string
+        description: 'Directory to run builds in'
+        required: false
+        default: '.'
+      run_tests:
+        type: boolean
+        description: 'Whether to run tests'
+        required: false
+        default: true
+      run_sonar_scan:
+        type: boolean
+        description: 'Whether to run SonarQube scan'
+        required: false
+        default: true
+      skip_nexus_upload:
+        type: boolean
+        description: 'Skip artifact upload to Nexus'
+        required: false
+        default: false
+    secrets:
+      DOPPLER_TOKEN:
+        description: 'Doppler token for fetching secrets'
+        required: true
+
+jobs:
+  ci-build:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-build.yml@main
+    with:
+      app_name: ${{ inputs.app_name }}
+      language: 'go'
+      language_version: ${{ inputs.go_version }}
+      build_tool: ${{ inputs.build_tool }}
+      working_directory: ${{ inputs.working_directory }}
+      run_tests: ${{ inputs.run_tests }}
+      run_sonar_scan: ${{ inputs.run_sonar_scan }}
+      skip_nexus_upload: ${{ inputs.skip_nexus_upload }}
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

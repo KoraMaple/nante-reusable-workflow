@@ -2,6 +2,92 @@
 
 ## Quick Start
 
+### CI/CD Workflows
+
+For building and testing your application, use the CI build workflow:
+
+#### Go Application
+```yaml
+name: CI Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-go.yml@main
+    with:
+      app_name: "my-go-app"
+      go_version: "1.22"
+      build_tool: "make"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+```
+
+#### Python Application
+```yaml
+name: CI Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-python.yml@main
+    with:
+      app_name: "my-python-app"
+      python_version: "3.11"
+      build_tool: "poetry"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+```
+
+#### Node.js Application
+```yaml
+name: CI Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-node.yml@main
+    with:
+      app_name: "my-node-app"
+      node_version: "20"
+      build_tool: "npm"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+```
+
+#### Java Application
+```yaml
+name: CI Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  ci:
+    uses: KoraMaple/nante-reusable-workflow/.github/workflows/ci-java.yml@main
+    with:
+      app_name: "my-java-app"
+      java_version: "17"
+      build_tool: "maven"
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+```
+
+### Infrastructure Provisioning
+
 From your application repository, create a workflow that calls `reusable-provision.yml`:
 
 ```yaml
@@ -25,6 +111,41 @@ jobs:
 ```
 
 ## Required Secrets
+
+### For CI/CD Workflows
+
+Set these in your **caller repository**:
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `DOPPLER_TOKEN` | **Required** - Doppler service token for fetching secrets | (from Doppler dashboard) |
+
+In **Doppler**, configure these secrets:
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `NEXUS_URL` | Nexus repository URL | `https://nexus.example.com` |
+| `NEXUS_USERNAME` | Nexus username | `ci-user` |
+| `NEXUS_PASSWORD` | Nexus password | (generated in Nexus) |
+| `SONAR_URL` | SonarQube server URL | `https://sonarqube.example.com` |
+| `SONAR_TOKEN` | SonarQube authentication token | (generated in SonarQube) |
+
+#### Setting up Doppler
+
+1. Create a Doppler account at https://doppler.com
+2. Create a project for your application
+3. Add the required secrets (NEXUS_URL, NEXUS_USERNAME, etc.)
+4. Generate a service token:
+   - Go to your project → Access → Service Tokens
+   - Click **Generate** and select the appropriate config
+   - Copy the token
+5. Add the token to your GitHub repository:
+   - Go to **Settings → Secrets and variables → Actions**
+   - Click **New repository secret**
+   - Name: `DOPPLER_TOKEN`
+   - Value: Your service token
+
+### For Infrastructure Provisioning
 
 Set these in your **caller repository** (or at the organization level):
 
