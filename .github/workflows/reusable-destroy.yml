@@ -64,11 +64,6 @@ on:
         description: 'Tailscale ACL tags for GitHub-hosted runner (comma-separated, e.g., "tag:ci,tag:provision")'
         required: false
         default: 'tag:ci'
-      minio_endpoint:
-        type: string
-        description: 'MinIO S3 endpoint for Terraform state backend. If not provided, uses MINIO_ENDPOINT from Doppler or defaults to internal network.'
-        required: false
-        default: ''
     secrets:
       DOPPLER_TOKEN:
         required: true
@@ -158,16 +153,16 @@ jobs:
           export TAILSCALE_OAUTH_CLIENT_SECRET="$TAILSCALE_OAUTH_CLIENT_SECRET"
           export TAILSCALE_TAILNET="${TAILSCALE_TAILNET:--}"
           
-          # Determine MinIO endpoint: use input, Doppler secret, or default
-          MINIO_ENDPOINT_URL="${{ inputs.minio_endpoint }}"
-          if [ -z "$MINIO_ENDPOINT_URL" ]; then
-            MINIO_ENDPOINT_URL="${MINIO_ENDPOINT:-http://minio.tailnet:9000}"
+          # Use MinIO endpoint from Doppler (required secret)
+          if [ -z "$MINIO_ENDPOINT" ]; then
+            echo "❌ ERROR: MINIO_ENDPOINT not found in Doppler. Please configure this secret."
+            exit 1
           fi
           
           # Terraform Init
           terraform init \
             -backend-config="bucket=terraform-state" \
-            -backend-config="endpoints={s3=\"${MINIO_ENDPOINT_URL}\"}" \
+            -backend-config="endpoints={s3=\"${MINIO_ENDPOINT}\"}" \
             -backend-config="access_key=$MINIO_ROOT_USER" \
             -backend-config="secret_key=$MINIO_ROOT_PASSWORD"
           

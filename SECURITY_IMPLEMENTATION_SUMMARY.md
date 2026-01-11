@@ -51,13 +51,14 @@ This document summarizes all security changes made to prepare the repository for
     github.event.pull_request.head.repo.full_name == github.repository
   ```
 
-### 3. ✅ HIGH: Hardcoded MinIO Endpoint (Parameterized)
+### 3. ✅ HIGH: Hardcoded MinIO Endpoint (Moved to Doppler)
 
 **Problem:** MinIO endpoint `http://192.168.20.10:9000` was hardcoded in workflows.
 
 **Solution:**
-- Added `minio_endpoint` input parameter to provision and destroy workflows
-- Workflows now use: input → Doppler secret → default fallback
+- MinIO endpoint is now exclusively configured via Doppler (`MINIO_ENDPOINT` secret)
+- Workflow validates that `MINIO_ENDPOINT` is set and fails early if missing
+- GitHub-hosted runners access MinIO via Tailscale VPN using Tailnet DNS (e.g., `http://minio.tailnet:9000`)
 - Default changed to `http://minio.tailnet:9000` (Tailscale DNS)
 
 ### 4. ✅ MEDIUM: Incomplete Secret Masking (Fixed)
@@ -160,7 +161,7 @@ Automatic Disconnection (ephemeral connection)
 | Setting | Before | After |
 |---------|--------|-------|
 | `runner_type` | `self-hosted` | `github-hosted` |
-| MinIO Endpoint | `http://192.168.20.10:9000` | Parameterized (Doppler or input) |
+| MinIO Endpoint | `http://192.168.20.10:9000` | Doppler secret (`MINIO_ENDPOINT`) |
 | Fork PR Protection | None | Block fork PRs from infrastructure ops |
 | Secret Masking | Partial | Comprehensive (11 secrets) |
 
