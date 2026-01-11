@@ -15,18 +15,18 @@ All these variables are automatically set by `site.yml`:
 The HAProxy configuration template will generate:
 
 ```haproxy
-# For 3-node cluster (192.168.20.70, 192.168.20.71, 192.168.20.72)
+# For 3-node cluster (<INTERNAL_IP_VLAN20>, <INTERNAL_IP_VLAN20>, <INTERNAL_IP_VLAN20>)
 listen postgres_primary
     bind *:5000
-    server patroni-prod-node1 192.168.20.70:5432 check port 8008
-    server patroni-prod-node2 192.168.20.71:5432 check port 8008
-    server patroni-prod-node3 192.168.20.72:5432 check port 8008
+    server patroni-prod-node1 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server patroni-prod-node2 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server patroni-prod-node3 <INTERNAL_IP_VLAN20>:5432 check port 8008
 
 listen postgres_replicas
     bind *:5001
-    server patroni-prod-node1 192.168.20.70:5432 check port 8008
-    server patroni-prod-node2 192.168.20.71:5432 check port 8008
-    server patroni-prod-node3 192.168.20.72:5432 check port 8008
+    server patroni-prod-node1 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server patroni-prod-node2 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server patroni-prod-node3 <INTERNAL_IP_VLAN20>:5432 check port 8008
 ```
 
 ## Deployment Steps
@@ -41,42 +41,42 @@ ansible_roles: "etcd,patroni,haproxy"
 
 ```
 TASK [haproxy : Check if required ports are available]
-ok: [192.168.20.70] => (item=5000)
-ok: [192.168.20.71] => (item=5000)
-ok: [192.168.20.72] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
 
 TASK [haproxy : Install HAProxy]
-changed: [192.168.20.70]
-changed: [192.168.20.71]
-changed: [192.168.20.72]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
 
 TASK [haproxy : Create HAProxy configuration]
-changed: [192.168.20.70]
-changed: [192.168.20.71]
-changed: [192.168.20.72]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
 
 TASK [haproxy : Enable and start HAProxy service]
-changed: [192.168.20.70]
-changed: [192.168.20.71]
-changed: [192.168.20.72]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
+changed: [<INTERNAL_IP_VLAN20>]
 
 TASK [haproxy : Verify HAProxy is listening on ports]
-ok: [192.168.20.70] => (item=5000)
-ok: [192.168.20.71] => (item=5000)
-ok: [192.168.20.72] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
+ok: [<INTERNAL_IP_VLAN20>] => (item=5000)
 
 TASK [haproxy : Display HAProxy connection info]
-ok: [192.168.20.70] => {
+ok: [<INTERNAL_IP_VLAN20>] => {
     "msg": [
         "===================================================================",
         "HAProxy PostgreSQL Load Balancer Configured",
         "===================================================================",
-        "Primary (read-write): 192.168.20.70:5000",
-        "Replicas (read-only): 192.168.20.71:5001",
-        "HAProxy Stats: http://192.168.20.70:7000/stats",
+        "Primary (read-write): <INTERNAL_IP_VLAN20>:5000",
+        "Replicas (read-only): <INTERNAL_IP_VLAN20>:5001",
+        "HAProxy Stats: http://<INTERNAL_IP_VLAN20>:7000/stats",
         "",
         "Connect to PostgreSQL:",
-        "  psql -h 192.168.20.70 -p 5000 -U postgres",
+        "  psql -h <INTERNAL_IP_VLAN20> -p 5000 -U postgres",
         "==================================================================="
     ]
 }
@@ -113,19 +113,19 @@ Expected: `Configuration file is valid`
 ```bash
 curl http://localhost:7000/stats
 ```
-Or open in browser: `http://192.168.20.70:7000/stats`
+Or open in browser: `http://<INTERNAL_IP_VLAN20>:7000/stats`
 
 **5. Test health check endpoints:**
 ```bash
 # Check Patroni primary endpoint
-curl http://192.168.20.70:8008/
-curl http://192.168.20.71:8008/
-curl http://192.168.20.72:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
 
 # Check Patroni replica endpoint
-curl http://192.168.20.70:8008/replica
-curl http://192.168.20.71:8008/replica
-curl http://192.168.20.72:8008/replica
+curl http://<INTERNAL_IP_VLAN20>:8008/replica
+curl http://<INTERNAL_IP_VLAN20>:8008/replica
+curl http://<INTERNAL_IP_VLAN20>:8008/replica
 ```
 
 Expected: HTTP 200 from primary, 200 from replicas
@@ -134,20 +134,20 @@ Expected: HTTP 200 from primary, 200 from replicas
 
 **1. Test primary connection (read-write):**
 ```bash
-psql -h 192.168.20.70 -p 5000 -U postgres -c "SELECT pg_is_in_recovery();"
+psql -h <INTERNAL_IP_VLAN20> -p 5000 -U postgres -c "SELECT pg_is_in_recovery();"
 ```
 Expected: `f` (false - not in recovery, this is primary)
 
 **2. Test replica connection (read-only):**
 ```bash
-psql -h 192.168.20.70 -p 5001 -U postgres -c "SELECT pg_is_in_recovery();"
+psql -h <INTERNAL_IP_VLAN20> -p 5001 -U postgres -c "SELECT pg_is_in_recovery();"
 ```
 Expected: `t` (true - in recovery, this is replica) or `f` if connected to primary
 
 **3. Test write through HAProxy:**
 ```bash
-psql -h 192.168.20.70 -p 5000 -U postgres -c "CREATE TABLE test_haproxy (id int);"
-psql -h 192.168.20.70 -p 5000 -U postgres -c "DROP TABLE test_haproxy;"
+psql -h <INTERNAL_IP_VLAN20> -p 5000 -U postgres -c "CREATE TABLE test_haproxy (id int);"
+psql -h <INTERNAL_IP_VLAN20> -p 5000 -U postgres -c "DROP TABLE test_haproxy;"
 ```
 Expected: Success
 
@@ -169,7 +169,7 @@ journalctl -u haproxy -n 50 --no-pager
 
 **Check Patroni REST API:**
 ```bash
-curl -v http://192.168.20.70:8008/
+curl -v http://<INTERNAL_IP_VLAN20>:8008/
 ```
 
 If this fails, Patroni is not running or not listening on port 8008.
@@ -190,7 +190,7 @@ ss -tlnp | grep 5432
 
 **2. Test direct PostgreSQL connection:**
 ```bash
-psql -h 192.168.20.70 -p 5432 -U postgres
+psql -h <INTERNAL_IP_VLAN20> -p 5432 -U postgres
 ```
 
 **3. Check HAProxy is routing correctly:**

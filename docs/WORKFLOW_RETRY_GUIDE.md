@@ -124,10 +124,10 @@ cd ansible/
 ansible-galaxy install -r requirements.yml
 
 # Test connectivity
-ansible all -i "192.168.20.50," -m ping --user deploy
+ansible all -i "<INTERNAL_IP_VLAN20>," -m ping --user deploy
 
 # Run playbook
-ansible-playbook -i "192.168.20.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN20>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
   --extra-vars "app_role_name=myapp" \

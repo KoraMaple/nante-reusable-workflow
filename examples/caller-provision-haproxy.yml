@@ -10,14 +10,14 @@ jobs:
       app_name: patroni-ha-lb
       resource_type: lxc
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.63"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "15G"
       ansible_roles: haproxy
       # Pass Patroni backend IPs - replace with your actual Patroni node IPs
       # Format: name:ip,name:ip,name:ip
-      ansible_extra_vars: patroni_backends=patroni-ha-node1:192.168.20.70,patroni-ha-node2:192.168.20.71,patroni-ha-node3:192.168.20.72
+      ansible_extra_vars: patroni_backends=patroni-ha-node1:<INTERNAL_IP_VLAN20>,patroni-ha-node2:<INTERNAL_IP_VLAN20>,patroni-ha-node3:<INTERNAL_IP_VLAN20>
       lxc_unprivileged: true
       skip_octopus: true
     secrets:

@@ -143,7 +143,7 @@ See `ARCHITECTURE.md` for detailed implementation plan.
    - Use `instances` map with named nodes
    - Hostname: `${app_name}-${environment}-${instance_key}`
    - Each instance can override CPU/RAM/disk defaults
-   - Example: `{"node1": {"ip_address": "192.168.10.51"}}`
+   - Example: `{"node1": {"ip_address": "<INTERNAL_IP_VLAN10>"}}`
 
 **Configurable Parameters:**
 - `resource_type`: `vm` or `lxc`
@@ -642,7 +642,7 @@ When writing documentation:
 
 2. **Provide examples in comments:**
    ```yaml
-   vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.50
+   vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: <INTERNAL_IP_VLAN20>
    ```
 
 3. **Reference Doppler for secrets:**

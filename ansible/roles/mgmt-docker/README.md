@@ -61,7 +61,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
     with:
-      target_ip: "192.168.20.50"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"

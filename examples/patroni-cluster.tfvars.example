@@ -12,19 +12,19 @@ vlan_tag = "10"  # 10 = DMZ/production, 20 = internal dev
 # Multi-instance configuration for 3-node cluster
 instances = {
   node1 = {
-    ip_address = "192.168.10.51"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "2"
     ram_mb     = "4096"
     disk_gb    = "40G"
   }
   node2 = {
-    ip_address = "192.168.10.52"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "2"
     ram_mb     = "4096"
     disk_gb    = "40G"
   }
   node3 = {
-    ip_address = "192.168.10.53"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "2"
     ram_mb     = "4096"
     disk_gb    = "40G"

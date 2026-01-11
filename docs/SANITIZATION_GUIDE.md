@@ -8,11 +8,11 @@ All specific internal IP addresses have been replaced with placeholders:
 
 | Original Pattern | Replacement | Usage |
 |-----------------|-------------|-------|
-| `192.168.20.10` | `<MINIO_INTERNAL_IP>` or `minio.tailnet` | MinIO server |
+| `<INTERNAL_IP_VLAN20>` | `<MINIO_INTERNAL_IP>` or `minio.tailnet` | MinIO server |
 | `192.168.20.x` | `<INTERNAL_IP_VLAN20>` | Internal dev network |
 | `192.168.10.x` | `<INTERNAL_IP_VLAN10>` | DMZ/production network |
-| `192.168.20.1` | `<GATEWAY_VLAN20>` | Default gateway for VLAN 20 |
-| `192.168.10.1` | `<GATEWAY_VLAN10>` | Default gateway for VLAN 10 |
+| `<INTERNAL_IP_VLAN20>` | `<GATEWAY_VLAN20>` | Default gateway for VLAN 20 |
+| `<INTERNAL_IP_VLAN10>` | `<GATEWAY_VLAN10>` | Default gateway for VLAN 10 |
 
 ## Service Name Sanitization
 

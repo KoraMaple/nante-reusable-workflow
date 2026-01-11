@@ -133,7 +133,7 @@ When HAProxy runs on all nodes, use:
 ### Example: Application Failover
 
 ```python
-HAPROXY_HOSTS = ["192.168.20.70", "192.168.20.71", "192.168.20.72"]
+HAPROXY_HOSTS = ["<INTERNAL_IP_VLAN20>", "<INTERNAL_IP_VLAN20>", "<INTERNAL_IP_VLAN20>"]
 
 for host in HAPROXY_HOSTS:
     try:
@@ -152,9 +152,9 @@ HAProxy configuration is in `/etc/haproxy/haproxy.cfg`:
 listen postgres_primary
     bind *:5000
     option httpchk
-    server node1 192.168.20.70:5432 check port 8008
-    server node2 192.168.20.71:5432 check port 8008
-    server node3 192.168.20.72:5432 check port 8008
+    server node1 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server node2 <INTERNAL_IP_VLAN20>:5432 check port 8008
+    server node3 <INTERNAL_IP_VLAN20>:5432 check port 8008
 ```
 
 ## Troubleshooting
@@ -168,10 +168,10 @@ journalctl -u haproxy -f
 ### Test Health Checks
 ```bash
 # Check primary endpoint
-curl http://192.168.20.70:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
 
 # Check replica endpoint
-curl http://192.168.20.70:8008/replica
+curl http://<INTERNAL_IP_VLAN20>:8008/replica
 ```
 
 ### Verify Backend Status

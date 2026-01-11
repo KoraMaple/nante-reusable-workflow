@@ -27,7 +27,7 @@ on:
         default: ''
       instances:
         type: string
-        description: 'JSON map of instances for multi-instance deployments (e.g., {"node1":{"ip_address":"192.168.10.51"}}). Leave empty for single instance mode.'
+        description: 'JSON map of instances for multi-instance deployments (e.g., {"node1":{"ip_address":"<INTERNAL_IP_VLAN10>"}}). Leave empty for single instance mode.'
         required: false
         default: ''
       cpu_cores:
@@ -116,7 +116,7 @@ on:
         default: ''
       ansible_extra_vars:
         type: string
-        description: 'Additional Ansible extra vars in JSON format (e.g., patroni_backends=[{name:node1,ip:192.168.20.61}])'
+        description: 'Additional Ansible extra vars in JSON format (e.g., patroni_backends=[{name:node1,ip:<INTERNAL_IP_VLAN20>}])'
         required: false
         default: ''
       # Runner configuration

@@ -55,7 +55,7 @@ OO_PASS=admin-password
 
 ### FreeIPA LDAP (for centralized authentication)
 ```
-FREEIPA_SERVER_IP=192.168.20.10
+FREEIPA_SERVER_IP=<INTERNAL_IP_VLAN20>
 FREEIPA_ADMIN_PASSWORD=<admin-password-from-setup>
 ```
 
@@ -143,12 +143,12 @@ doppler secrets set OCTOPUS_API_KEY="API-XXXXXXXX"
 doppler secrets set OCTOPUS_SPACE_ID="Spaces-1"
 
 # Optional: Add Grafana
-doppler secrets set OO_HOST="192.168.20.5"
+doppler secrets set OO_HOST="<INTERNAL_IP_VLAN20>"
 doppler secrets set OO_USER="admin"
 doppler secrets set OO_PASS="admin-password"
 
 # Optional: Add FreeIPA (after server setup)
-doppler secrets set FREEIPA_SERVER_IP="192.168.20.10"
+doppler secrets set FREEIPA_SERVER_IP="<INTERNAL_IP_VLAN20>"
 doppler secrets set FREEIPA_ADMIN_PASSWORD="generated-password"
 
 # Optional: Add Nexus (for CI/CD)

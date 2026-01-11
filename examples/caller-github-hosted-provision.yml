@@ -24,7 +24,7 @@ on:
         required: true
         default: '20'
       vm_target_ip:
-        description: 'Target IP address (e.g., 192.168.20.100)'
+        description: 'Target IP address (e.g., <INTERNAL_IP_VLAN20>)'
         required: true
 
 jobs:

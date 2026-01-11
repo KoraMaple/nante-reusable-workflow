@@ -6,7 +6,7 @@ on:
       server_ip:
         description: 'FreeIPA server IP address'
         required: true
-        default: '192.168.20.10'
+        default: '<INTERNAL_IP_VLAN20>'
 
 jobs:
   provision-freeipa:
