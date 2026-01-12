@@ -76,7 +76,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       runner_type: "github-hosted"  # Use GitHub-hosted runner
       tailscale_tags: "tag:ci"      # ACL tags for access control
     secrets:

@@ -7,7 +7,7 @@
       
       Format: comma-separated list of name:ip pairs
       Example:
-        ansible_extra_vars: "patroni_backends=patroni-node1:192.168.20.61,patroni-node2:192.168.20.62,patroni-node3:192.168.20.63"
+        ansible_extra_vars: "patroni_backends=patroni-node1:<INTERNAL_IP_VLAN20>,patroni-node2:<INTERNAL_IP_VLAN20>,patroni-node3:<INTERNAL_IP_VLAN20>"
   when: patroni_backends is not defined or patroni_backends | length == 0
 
 - name: Parse patroni_backends from string format

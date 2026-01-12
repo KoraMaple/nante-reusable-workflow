@@ -433,7 +433,7 @@ uses: ./.github/workflows/reusable-provision.yml
 with:
   resource_type: lxc
   app_name: web-app
-  vm_target_ip: 192.168.20.100
+  vm_target_ip: <INTERNAL_IP_VLAN20>
   cpu_cores: 2
   ram_mb: 2048
   disk_gb: 8
@@ -447,7 +447,7 @@ uses: ./.github/workflows/reusable-provision.yml
 with:
   resource_type: lxc
   app_name: docker-host
-  vm_target_ip: 192.168.20.101
+  vm_target_ip: <INTERNAL_IP_VLAN20>
   cpu_cores: 4
   ram_mb: 4096
   disk_gb: 20
@@ -461,7 +461,7 @@ uses: ./.github/workflows/reusable-provision.yml
 with:
   resource_type: lxc
   app_name: legacy-app
-  vm_target_ip: 192.168.20.102
+  vm_target_ip: <INTERNAL_IP_VLAN20>
   cpu_cores: 2
   ram_mb: 2048
   disk_gb: 10

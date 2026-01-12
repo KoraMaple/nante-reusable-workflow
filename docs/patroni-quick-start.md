@@ -5,7 +5,7 @@ This is a condensed guide for quickly deploying a 3-node Patroni PostgreSQL HA c
 ## Prerequisites
 
 - Proxmox environment with Ubuntu template
-- 3 available static IPs (e.g., 192.168.10.51-53)
+- 3 available static IPs (e.g., <INTERNAL_IP_VLAN10>-53)
 - Your own GitHub repository (caller repo)
 - Doppler secrets configured in your caller repo
 
@@ -34,9 +34,9 @@ jobs:
       disk_gb: "40G"
       instances: |
         {
-          "node1": {"ip_address": "192.168.10.51"},
-          "node2": {"ip_address": "192.168.10.52"},
-          "node3": {"ip_address": "192.168.10.53"}
+          "node1": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+          "node2": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+          "node3": {"ip_address": "<INTERNAL_IP_VLAN10>"}
         }
       ansible_roles: "etcd,patroni"
 ```
@@ -70,7 +70,7 @@ This single workflow run will:
 
 ```bash
 # SSH to any node
-ssh deploy@192.168.10.51
+ssh deploy@<INTERNAL_IP_VLAN10>
 
 # Check cluster status
 sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
@@ -79,9 +79,9 @@ sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
 # + Cluster: postgres-cluster (7123456789012345678) -----+----+-----------+
 # | Member    | Host          | Role    | State   | TL | Lag in MB |
 # +-----------+---------------+---------+---------+----+-----------+
-# | patroni1  | 192.168.10.51 | Leader  | running |  1 |           |
-# | patroni2  | 192.168.10.52 | Replica | running |  1 |         0 |
-# | patroni3  | 192.168.10.53 | Replica | running |  1 |         0 |
+# | patroni1  | <INTERNAL_IP_VLAN10> | Leader  | running |  1 |           |
+# | patroni2  | <INTERNAL_IP_VLAN10> | Replica | running |  1 |         0 |
+# | patroni3  | <INTERNAL_IP_VLAN10> | Replica | running |  1 |         0 |
 # +-----------+---------------+---------+---------+----+-----------+
 ```
 
@@ -89,25 +89,25 @@ sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
 
 ```bash
 # Connect to primary (read-write)
-psql -h 192.168.10.51 -U admin -d postgres
+psql -h <INTERNAL_IP_VLAN10> -U admin -d postgres
 
 # Connect to replica (read-only)
-psql -h 192.168.10.52 -U admin -d postgres
+psql -h <INTERNAL_IP_VLAN10> -U admin -d postgres
 ```
 
 ## Test Failover
 
 ```bash
 # Stop primary node
-ssh deploy@192.168.10.51
+ssh deploy@<INTERNAL_IP_VLAN10>
 sudo systemctl stop patroni
 
 # Check cluster - a new leader should be elected
-ssh deploy@192.168.10.52
+ssh deploy@<INTERNAL_IP_VLAN10>
 sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
 
 # Restart original primary - it becomes a replica
-ssh deploy@192.168.10.51
+ssh deploy@<INTERNAL_IP_VLAN10>
 sudo systemctl start patroni
 ```
 
@@ -121,7 +121,7 @@ sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
 sudo -u postgres patronictl -c /etc/patroni/patroni.yml switchover
 
 # Check etcd health
-ETCDCTL_API=3 etcdctl --endpoints=192.168.10.51:2379,192.168.10.52:2379,192.168.10.53:2379 endpoint health
+ETCDCTL_API=3 etcdctl --endpoints=<INTERNAL_IP_VLAN10>:2379,<INTERNAL_IP_VLAN10>:2379,<INTERNAL_IP_VLAN10>:2379 endpoint health
 
 # View Patroni logs
 journalctl -u patroni -f
@@ -162,12 +162,12 @@ sudo systemctl start patroni
 **Check connectivity:**
 ```bash
 # Test etcd from each node
-curl http://192.168.10.51:2379/health
-curl http://192.168.10.52:2379/health
-curl http://192.168.10.53:2379/health
+curl http://<INTERNAL_IP_VLAN10>:2379/health
+curl http://<INTERNAL_IP_VLAN10>:2379/health
+curl http://<INTERNAL_IP_VLAN10>:2379/health
 
 # Test Patroni API
-curl http://192.168.10.51:8008/health
+curl http://<INTERNAL_IP_VLAN10>:8008/health
 ```
 
 ## Next Steps

@@ -24,7 +24,7 @@ OCTOPUS_ENVIRONMENT=Development
 **`OCTOPUS_SERVER_URL`**
 - Full URL to your Octopus Server
 - Include protocol (https://)
-- Example: `https://octopus.example.com` or `http://192.168.20.15:8080`
+- Example: `https://octopus.example.com` or `http://<INTERNAL_IP_VLAN20>:8080`
 
 **`OCTOPUS_API_KEY`**
 - API key with permissions to register deployment targets
@@ -85,7 +85,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "20G"
@@ -107,7 +107,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@main
     with:
-      target_ip: "192.168.20.100"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"
@@ -129,7 +129,7 @@ jobs:
     with:
       app_name: "test-vm"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.99"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
     secrets: inherit
     # Don't pass octopus_environment or octopus_roles
     # Or ensure OCTOPUS_SERVER_URL is not set in Doppler

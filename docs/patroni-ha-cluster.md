@@ -18,7 +18,7 @@ The cluster consists of:
    - Available IP addresses in your VLAN
 
 2. **Network Requirements**
-   - 3 static IP addresses (e.g., 192.168.10.51-53)
+   - 3 static IP addresses (e.g., <INTERNAL_IP_VLAN10>-53)
    - Ports required:
      - PostgreSQL: 5432
      - Patroni REST API: 8008
@@ -63,9 +63,9 @@ jobs:
       # Multi-instance configuration for 3-node cluster
       instances: |
         {
-          "node1": {"ip_address": "192.168.10.51"},
-          "node2": {"ip_address": "192.168.10.52"},
-          "node3": {"ip_address": "192.168.10.53"}
+          "node1": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+          "node2": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+          "node3": {"ip_address": "<INTERNAL_IP_VLAN10>"}
         }
       ansible_roles: "etcd,patroni"
 ```
@@ -75,13 +75,13 @@ jobs:
 ```yaml
 instances: |
   {
-    "node1": {"ip_address": "192.168.10.51"},
+    "node1": {"ip_address": "<INTERNAL_IP_VLAN10>"},
     "node2": {
-      "ip_address": "192.168.10.52",
+      "ip_address": "<INTERNAL_IP_VLAN10>",
       "cpu_cores": "4",
       "ram_mb": "8192"
     },
-    "node3": {"ip_address": "192.168.10.53"}
+    "node3": {"ip_address": "<INTERNAL_IP_VLAN10>"}
   }
 ```
 
@@ -134,7 +134,7 @@ SSH into any node and check the cluster status:
 sudo -u postgres patronictl -c /etc/patroni/patroni.yml list
 
 # Check etcd cluster health
-ETCDCTL_API=3 etcdctl --endpoints=192.168.10.51:2379,192.168.10.52:2379,192.168.10.53:2379 endpoint health
+ETCDCTL_API=3 etcdctl --endpoints=<INTERNAL_IP_VLAN10>:2379,<INTERNAL_IP_VLAN10>:2379,<INTERNAL_IP_VLAN10>:2379 endpoint health
 
 # Check PostgreSQL replication
 sudo -u postgres psql -c "SELECT * FROM pg_stat_replication;"
@@ -146,12 +146,12 @@ sudo -u postgres psql -c "SELECT * FROM pg_stat_replication;"
 
 **Primary node (read-write):**
 ```bash
-psql -h 192.168.10.51 -U admin -d postgres
+psql -h <INTERNAL_IP_VLAN10> -U admin -d postgres
 ```
 
 **Any replica (read-only):**
 ```bash
-psql -h 192.168.10.52 -U admin -d postgres
+psql -h <INTERNAL_IP_VLAN10> -U admin -d postgres
 ```
 
 ### Manual Failover
@@ -181,10 +181,10 @@ To scale the cluster, update the `instances` map in your workflow and re-run:
 ```yaml
 instances: |  
   {
-    "node1": {"ip_address": "192.168.10.51"},
-    "node2": {"ip_address": "192.168.10.52"},
-    "node3": {"ip_address": "192.168.10.53"},
-    "node4": {"ip_address": "192.168.10.54"}  # New node
+    "node1": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+    "node2": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+    "node3": {"ip_address": "<INTERNAL_IP_VLAN10>"},
+    "node4": {"ip_address": "<INTERNAL_IP_VLAN10>"}  # New node
   }
 ```
 

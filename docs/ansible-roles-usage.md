@@ -41,7 +41,7 @@ jobs:
       app_name: webserver
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "nginx"
 ```
 
@@ -60,7 +60,7 @@ jobs:
       app_name: appserver
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.51"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "nginx,myapp"
 ```
 
@@ -79,7 +79,7 @@ jobs:
       app_name: docker-host
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.52"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "mgmt-docker"
 ```
 
@@ -100,7 +100,7 @@ jobs:
       app_name: web
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.60"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "nginx"
 
   provision-app:
@@ -110,7 +110,7 @@ jobs:
       app_name: app
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.61"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "myapp,redis"
 
   provision-docker:
@@ -120,7 +120,7 @@ jobs:
       app_name: docker
       environment: prod
       vlan_tag: "10"
-      vm_target_ip: "192.168.10.62"
+      vm_target_ip: "<INTERNAL_IP_VLAN10>"
       ansible_roles: "mgmt-docker"
 ```
 
@@ -137,7 +137,7 @@ jobs:
       app_name: basevm
       environment: dev
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       # ansible_roles is empty - only base_setup and ldap-config run
 ```
 
@@ -179,7 +179,7 @@ jobs:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
     secrets: inherit
     with:
-      target_ip: "192.168.10.100"
+      target_ip: "<INTERNAL_IP_VLAN10>"
       ssh_user: "deploy"
       target_hostname: "existing-server"
       ansible_roles: "nginx,myapp"
@@ -191,19 +191,19 @@ If running Ansible directly (not through workflows):
 
 ```bash
 # Single role
-ansible-playbook -i "192.168.10.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN10>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
   --extra-vars 'ansible_roles=["nginx"]'
 
 # Multiple roles
-ansible-playbook -i "192.168.10.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN10>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp" \
   --extra-vars 'ansible_roles=["nginx","mgmt-docker"]'
 
 # No custom roles (base setup only)
-ansible-playbook -i "192.168.10.50," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN10>," site.yml \
   --user deploy \
   --extra-vars "target_hostname=myapp"
 ```

@@ -17,7 +17,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.100
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"  # Example: <INTERNAL_IP_VLAN20>
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "20G"
@@ -145,7 +145,7 @@ jobs:
   bootstrap:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-bootstrap.yml@develop
     with:
-      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.150
+      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: <INTERNAL_IP_VLAN20>
       ssh_user: "root"  # or your existing admin user
       ssh_password_secret_name: "BOOTSTRAP_SSH_PASSWORD"
     secrets: inherit
@@ -180,7 +180,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
     with:
-      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: 192.168.20.50
+      target_ip: "<INTERNAL_IP_VLAN20>"  # Example: <INTERNAL_IP_VLAN20>
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"

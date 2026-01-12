@@ -7,10 +7,10 @@ haproxy_postgres_replica_port: 5001
 # Patroni backend servers
 # Format: comma-separated string of name:ip pairs OR list of dicts with 'name' and 'ip' keys
 # String format example (recommended for workflow inputs):
-#   patroni_backends: "patroni-node1:192.168.20.61,patroni-node2:192.168.20.62,patroni-node3:192.168.20.63"
+#   patroni_backends: "patroni-node1:<INTERNAL_IP_VLAN20>,patroni-node2:<INTERNAL_IP_VLAN20>,patroni-node3:<INTERNAL_IP_VLAN20>"
 # List format example (for playbook vars):
 #   patroni_backends:
-#     - { name: "patroni-node1", ip: "192.168.20.61" }
-#     - { name: "patroni-node2", ip: "192.168.20.62" }
-#     - { name: "patroni-node3", ip: "192.168.20.63" }
+#     - { name: "patroni-node1", ip: "<INTERNAL_IP_VLAN20>" }
+#     - { name: "patroni-node2", ip: "<INTERNAL_IP_VLAN20>" }
+#     - { name: "patroni-node3", ip: "<INTERNAL_IP_VLAN20>" }
 patroni_backends: []

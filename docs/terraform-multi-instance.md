@@ -15,7 +15,7 @@ This mode maintains backward compatibility with existing deployments.
 
 ```hcl
 resource_type  = "vm"
-vm_target_ip   = "192.168.10.50"
+vm_target_ip   = "<INTERNAL_IP_VLAN10>"
 vm_cpu_cores   = "2"
 vm_ram_mb      = "4096"
 vm_disk_gb     = "20G"
@@ -36,19 +36,19 @@ vlan_tag      = "10"
 
 instances = {
   node1 = {
-    ip_address = "192.168.10.51"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "2"      # optional, defaults to vm_cpu_cores
     ram_mb     = "4096"   # optional, defaults to vm_ram_mb
     disk_gb    = "40G"    # optional, defaults to vm_disk_gb
   }
   node2 = {
-    ip_address = "192.168.10.52"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "4"      # override default
     ram_mb     = "8192"
     disk_gb    = "60G"
   }
   node3 = {
-    ip_address = "192.168.10.53"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     # Uses defaults for cpu_cores, ram_mb, disk_gb
   }
 }
@@ -85,7 +85,7 @@ output "vm_hostnames" {
 }
 
 output "vm_target_ips" {
-  # Returns: { "node1" = "192.168.10.51", ... }
+  # Returns: { "node1" = "<INTERNAL_IP_VLAN10>", ... }
 }
 ```
 
@@ -100,7 +100,7 @@ output "lxc_hostnames" {
 }
 
 output "lxc_ips" {
-  # Returns: { "node1" = "192.168.10.51", ... }
+  # Returns: { "node1" = "<INTERNAL_IP_VLAN10>", ... }
 }
 ```
 
@@ -117,12 +117,12 @@ vm_disk_gb   = "20G"
 instances = {
   # Small node - uses defaults
   node1 = {
-    ip_address = "192.168.10.51"
+    ip_address = "<INTERNAL_IP_VLAN10>"
   }
   
   # Large node - overrides defaults
   node2 = {
-    ip_address = "192.168.10.52"
+    ip_address = "<INTERNAL_IP_VLAN10>"
     cpu_cores  = "8"
     ram_mb     = "16384"
     disk_gb    = "100G"
@@ -144,13 +144,13 @@ jobs:
       instances: |
         {
           "node1": {
-            "ip_address": "192.168.10.51",
+            "ip_address": "<INTERNAL_IP_VLAN10>",
             "cpu_cores": "2",
             "ram_mb": "4096",
             "disk_gb": "40G"
           },
           "node2": {
-            "ip_address": "192.168.10.52",
+            "ip_address": "<INTERNAL_IP_VLAN10>",
             "cpu_cores": "2",
             "ram_mb": "4096",
             "disk_gb": "40G"
@@ -170,18 +170,18 @@ If you have existing single-instance deployments and want to add more nodes:
 Example:
 ```hcl
 # Before (single instance)
-vm_target_ip = "192.168.10.51"
+vm_target_ip = "<INTERNAL_IP_VLAN10>"
 
 # After (multi-instance, preserving existing)
 instances = {
   existing = {
-    ip_address = "192.168.10.51"  # Same IP as before
+    ip_address = "<INTERNAL_IP_VLAN10>"  # Same IP as before
   }
   node2 = {
-    ip_address = "192.168.10.52"  # New node
+    ip_address = "<INTERNAL_IP_VLAN10>"  # New node
   }
   node3 = {
-    ip_address = "192.168.10.53"  # New node
+    ip_address = "<INTERNAL_IP_VLAN10>"  # New node
   }
 }
 ```

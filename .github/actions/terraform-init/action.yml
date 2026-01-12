@@ -8,7 +8,7 @@ inputs:
   minio_endpoint:
     description: 'MinIO endpoint URL'
     required: false
-    default: 'http://192.168.20.10:9000'
+    default: 'http://<MINIO_HOST>:9000'
   bucket:
     description: 'MinIO bucket name'
     required: false

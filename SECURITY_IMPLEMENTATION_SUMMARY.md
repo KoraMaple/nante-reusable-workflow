@@ -53,7 +53,7 @@ This document summarizes all security changes made to prepare the repository for
 
 ### 3. ✅ HIGH: Hardcoded MinIO Endpoint (Moved to Doppler)
 
-**Problem:** MinIO endpoint `http://192.168.20.10:9000` was hardcoded in workflows.
+**Problem:** MinIO endpoint `http://<MINIO_HOST>:9000` was hardcoded in workflows.
 
 **Solution:**
 - MinIO endpoint is now exclusively configured via Doppler (`MINIO_ENDPOINT` secret)
@@ -161,7 +161,7 @@ Automatic Disconnection (ephemeral connection)
 | Setting | Before | After |
 |---------|--------|-------|
 | `runner_type` | `self-hosted` | `github-hosted` |
-| MinIO Endpoint | `http://192.168.20.10:9000` | Doppler secret (`MINIO_ENDPOINT`) |
+| MinIO Endpoint | `http://<MINIO_HOST>:9000` | Doppler secret (`MINIO_ENDPOINT`) |
 | Fork PR Protection | None | Block fork PRs from infrastructure ops |
 | Secret Masking | Partial | Comprehensive (11 secrets) |
 

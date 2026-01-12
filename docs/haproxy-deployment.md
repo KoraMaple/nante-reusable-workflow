@@ -34,9 +34,9 @@ Add to your workflow caller:
 ```yaml
 ansible_extra_vars: |
   patroni_backends=[
-    {'name':'patroni-node1','ip':'192.168.20.61'},
-    {'name':'patroni-node2','ip':'192.168.20.62'},
-    {'name':'patroni-node3','ip':'192.168.20.63'}
+    {'name':'patroni-node1','ip':'<INTERNAL_IP_VLAN20>'},
+    {'name':'patroni-node2','ip':'<INTERNAL_IP_VLAN20>'},
+    {'name':'patroni-node3','ip':'<INTERNAL_IP_VLAN20>'}
   ]
 ```
 
@@ -47,7 +47,7 @@ If running Ansible directly:
 ```bash
 ansible-playbook -i inventory site.yml \
   --extra-vars "ansible_roles=['haproxy']" \
-  --extra-vars "patroni_backends=[{'name':'patroni-node1','ip':'192.168.20.61'},{'name':'patroni-node2','ip':'192.168.20.62'},{'name':'patroni-node3','ip':'192.168.20.63'}]"
+  --extra-vars "patroni_backends=[{'name':'patroni-node1','ip':'<INTERNAL_IP_VLAN20>'},{'name':'patroni-node2','ip':'<INTERNAL_IP_VLAN20>'},{'name':'patroni-node3','ip':'<INTERNAL_IP_VLAN20>'}]"
 ```
 
 #### Option 3: Via Group Vars
@@ -57,11 +57,11 @@ Create `group_vars/haproxy.yml`:
 ```yaml
 patroni_backends:
   - name: "patroni-node1"
-    ip: "192.168.20.61"
+    ip: "<INTERNAL_IP_VLAN20>"
   - name: "patroni-node2"
-    ip: "192.168.20.62"
+    ip: "<INTERNAL_IP_VLAN20>"
   - name: "patroni-node3"
-    ip: "192.168.20.63"
+    ip: "<INTERNAL_IP_VLAN20>"
 ```
 
 ## Configuration
@@ -75,11 +75,11 @@ Each backend requires:
 ```yaml
 patroni_backends:
   - name: "patroni-ha-node1-dev"
-    ip: "192.168.20.61"
+    ip: "<INTERNAL_IP_VLAN20>"
   - name: "patroni-ha-node2-dev"
-    ip: "192.168.20.62"
+    ip: "<INTERNAL_IP_VLAN20>"
   - name: "patroni-ha-node3-dev"
-    ip: "192.168.20.63"
+    ip: "<INTERNAL_IP_VLAN20>"
 ```
 
 ### Ports
@@ -140,9 +140,9 @@ echo "show stat" | socat stdio /run/haproxy/admin.sock | grep postgres
 **Check Network Connectivity**:
 ```bash
 # From HAProxy LXC
-curl http://192.168.20.61:8008/
-curl http://192.168.20.62:8008/
-curl http://192.168.20.63:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
+curl http://<INTERNAL_IP_VLAN20>:8008/
 ```
 
 ### Configuration Validation Failed
@@ -166,16 +166,16 @@ with:
   app_name: patroni-ha-lb
   resource_type: lxc
   vlan_tag: "20"
-  vm_target_ip: "192.168.20.63"
+  vm_target_ip: "<INTERNAL_IP_VLAN20>"
   cpu_cores: "2"
   ram_mb: "2048"
   disk_gb: "10G"
   ansible_roles: haproxy
   ansible_extra_vars: |
     patroni_backends=[
-      {'name':'patroni-ha-node1-dev','ip':'192.168.20.61'},
-      {'name':'patroni-ha-node2-dev','ip':'192.168.20.62'},
-      {'name':'patroni-ha-node3-dev','ip':'192.168.20.63'}
+      {'name':'patroni-ha-node1-dev','ip':'<INTERNAL_IP_VLAN20>'},
+      {'name':'patroni-ha-node2-dev','ip':'<INTERNAL_IP_VLAN20>'},
+      {'name':'patroni-ha-node3-dev','ip':'<INTERNAL_IP_VLAN20>'}
     ]
   lxc_unprivileged: false
 ```

@@ -214,13 +214,13 @@ From your runner, test SSH access:
 
 ```bash
 # Test password authentication
-ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no root@192.168.20.10
+ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no root@<INTERNAL_IP_VLAN20>
 
 # Test with sshpass
-sshpass -p 'YOUR_PASSWORD' ssh -o StrictHostKeyChecking=no root@192.168.20.10 'echo "SSH works"'
+sshpass -p 'YOUR_PASSWORD' ssh -o StrictHostKeyChecking=no root@<INTERNAL_IP_VLAN20> 'echo "SSH works"'
 
 # Check SSH server config remotely
-ssh root@192.168.20.10 'grep PasswordAuthentication /etc/ssh/sshd_config'
+ssh root@<INTERNAL_IP_VLAN20> 'grep PasswordAuthentication /etc/ssh/sshd_config'
 ```
 
 ## Common Bootstrap Issues
@@ -244,7 +244,7 @@ echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/github-runner
 **Solution:** Already handled by `StrictHostKeyChecking=no` in workflows, but you can also:
 ```bash
 # On runner, add to known_hosts
-ssh-keyscan -H 192.168.20.10 >> ~/.ssh/known_hosts
+ssh-keyscan -H <INTERNAL_IP_VLAN20> >> ~/.ssh/known_hosts
 ```
 
 ### Issue: Doppler secret not found
@@ -287,8 +287,8 @@ doppler secrets get BOOTSTRAP_SSH_PASSWORD
 **Diagnosis:**
 ```bash
 # From runner
-ping 192.168.20.10
-nc -zv 192.168.20.10 22  # Test SSH port
+ping <INTERNAL_IP_VLAN20>
+nc -zv <INTERNAL_IP_VLAN20> 22  # Test SSH port
 ```
 
 **Common Causes:**
@@ -302,7 +302,7 @@ nc -zv 192.168.20.10 22  # Test SSH port
 **Diagnosis:**
 ```bash
 # From runner
-curl -v http://192.168.20.10:9000
+curl -v http://<INTERNAL_IP_VLAN20>:9000
 ```
 
 **Solution:** Ensure MinIO is accessible from runner's network.
@@ -349,5 +349,5 @@ doppler run -- bash -c 'echo $MINIO_ROOT_USER'
 
 # Test Ansible connectivity
 cd ansible/
-doppler run -- ansible all -i "192.168.20.10," -m ping --user deploy
+doppler run -- ansible all -i "<INTERNAL_IP_VLAN20>," -m ping --user deploy
 ```

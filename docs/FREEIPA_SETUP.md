@@ -57,12 +57,12 @@ FreeIPA provides centralized authentication, authorization, and account manageme
 ### DNS Configuration
 Add DNS records for FreeIPA server:
 ```
-freeipa.kora.ldap.local.  IN  A  192.168.20.10
+freeipa.kora.ldap.local.  IN  A  <INTERNAL_IP_VLAN20>
 ```
 
 Or add to `/etc/hosts` on all servers:
 ```
-192.168.20.10  freeipa.kora.ldap.local freeipa
+<INTERNAL_IP_VLAN20>  freeipa.kora.ldap.local freeipa
 ```
 
 ## Installation
@@ -76,7 +76,7 @@ uses: ./.github/workflows/reusable-provision.yml
 with:
   resource_type: lxc
   app_name: freeipa
-  vm_target_ip: 192.168.20.10
+  vm_target_ip: <INTERNAL_IP_VLAN20>
   cpu_cores: '4'
   ram_mb: '4096'
   disk_gb: '20'
@@ -87,7 +87,7 @@ with:
 
 ```bash
 cd ansible/
-ansible-playbook -i "192.168.20.10," site.yml \
+ansible-playbook -i "<INTERNAL_IP_VLAN20>," site.yml \
   --user deploy \
   --extra-vars "app_role_name=freeipa"
 ```
@@ -167,7 +167,7 @@ ipa user-show jdoe
 
 1. **Add FreeIPA secrets to Doppler**:
    ```bash
-   doppler secrets set FREEIPA_SERVER_IP="192.168.20.10"
+   doppler secrets set FREEIPA_SERVER_IP="<INTERNAL_IP_VLAN20>"
    doppler secrets set FREEIPA_ADMIN_PASSWORD="<admin-password-from-setup>"
    ```
 
@@ -176,7 +176,7 @@ ipa user-show jdoe
    uses: ./.github/workflows/reusable-provision.yml
    with:
      app_name: web-server
-     vm_target_ip: 192.168.20.50
+     vm_target_ip: <INTERNAL_IP_VLAN20>
      # ... other params
    ```
 
@@ -195,7 +195,7 @@ If you need to manually enroll a server:
 ```yaml
 ansible-playbook site.yml \
   --extra-vars "app_role_name=ldap-config" \
-  --extra-vars "freeipa_server_ip=192.168.20.10" \
+  --extra-vars "freeipa_server_ip=<INTERNAL_IP_VLAN20>" \
   --extra-vars "freeipa_admin_password=<admin-password>"
 ```
 

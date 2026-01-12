@@ -1,0 +1,22 @@
+# Protect critical infrastructure files
+# These files require review from @KoraMaple/owners
+
+# GitHub workflows and actions
+/.github/workflows/ @KoraMaple/owners
+/.github/actions/ @KoraMaple/owners
+
+# Infrastructure as Code
+/terraform/ @KoraMaple/owners
+*.tf @KoraMaple/owners
+*.tfvars @KoraMaple/owners
+
+# Configuration management
+/ansible/ @KoraMaple/owners
+
+# Security-related files
+/SECURITY.md @KoraMaple/owners
+/docs/SECURITY.md @KoraMaple/owners
+/.github/CODEOWNERS @KoraMaple/owners
+
+# Copilot instructions (contain sensitive patterns)
+/.github/copilot-instructions.md @KoraMaple/owners

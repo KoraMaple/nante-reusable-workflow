@@ -125,7 +125,7 @@ jobs:
     with:
       app_name: "myapp"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       app_role: "nginx"
       octopus_environment: "Production"
       octopus_roles: "web-server,nginx"
@@ -139,7 +139,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@main
     with:
-      target_ip: "192.168.20.100"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"

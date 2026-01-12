@@ -1,17 +1,28 @@
 # Nante-reusable-workflows
 
-## 🚨 Security Notice for Public Use
+## 🔒 Security
 
-**This repository is now PUBLIC and safe to fork!** 🎉
+**This repository is PUBLIC** - the code is open source and safe to use.
 
-- ✅ **Safe to fork** - Uses GitHub-hosted runners with Tailscale by default
-- ✅ **Open source friendly** - Contributors can run full CI/CD
-- ✅ **No secrets in code** - All secrets via Doppler
-- ⚠️ **For self-hosted runners** - Only use in **PRIVATE repositories**
+### Runner Security
 
-### Before Using
+- **Default:** GitHub-hosted runners with Tailscale VPN
+- **KoraMaple org members:** Can optionally use self-hosted runners
+- **Fork PRs:** Always use GitHub-hosted runners (requires maintainer approval)
 
-1. **Read [`.github/SECURITY.md`](.github/SECURITY.md)** - Critical security information
+### Secret Management
+
+- All secrets managed via [Doppler](https://doppler.com)
+- No hardcoded credentials in any files
+- Automatic secret masking in workflow logs
+
+See [SECURITY.md](./SECURITY.md) for full security policy.
+
+---
+
+## 🚨 Before Using
+
+1. **Read [SECURITY.md](./SECURITY.md)** - Critical security information
 2. **Configure Doppler secrets** - See [`docs/DOPPLER_SECRETS.md`](docs/DOPPLER_SECRETS.md)
 3. **Set up Tailscale** - Required for GitHub-hosted runners to access internal infrastructure
 4. **Review workflows** - Understand what each workflow does
@@ -36,10 +47,10 @@ jobs:
       TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
 ```
 
-For private repositories with self-hosted runners:
+**For KoraMaple org members only** - Private repositories can use self-hosted runners:
 ```yaml
 with:
-  runner_type: "self-hosted"  # ⚠️ Only in private repos
+  runner_type: "self-hosted"  # ⚠️ Only available to org members
   # ... other inputs
 ```
 
@@ -102,7 +113,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       cpu_cores: "2"
       ram_mb: "2048"
       disk_gb: "20G"
@@ -116,7 +127,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@develop
     with:
-      target_ip: "192.168.20.100"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       ssh_user: "deploy"
       target_hostname: "docker-mgmt"
       app_role: "mgmt-docker"
@@ -297,7 +308,7 @@ jobs:
     with:
       app_name: "my-app"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
       cpu_cores: "2"
       ram_mb: "4096"
       disk_gb: "20G"

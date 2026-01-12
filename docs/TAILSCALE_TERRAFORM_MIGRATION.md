@@ -222,7 +222,7 @@ jobs:
     with:
       app_name: "test-ts-terraform"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.99"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
 ```
 
 **Verify:**
@@ -251,7 +251,7 @@ jobs:
   test:
     uses: ./.github/workflows/reusable-onboard.yml@develop
     with:
-      target_ip: "192.168.20.100"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       target_hostname: "existing-server"
 ```
 

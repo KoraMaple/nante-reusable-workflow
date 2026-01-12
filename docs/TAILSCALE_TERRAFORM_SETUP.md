@@ -158,7 +158,7 @@ jobs:
     with:
       app_name: "nginx"
       vlan_tag: "20"
-      vm_target_ip: "192.168.20.50"
+      vm_target_ip: "<INTERNAL_IP_VLAN20>"
     secrets: inherit
 ```
 
@@ -177,7 +177,7 @@ jobs:
   onboard:
     uses: KoraMaple/nante-reusable-workflow/.github/workflows/reusable-onboard.yml@main
     with:
-      target_ip: "192.168.20.100"
+      target_ip: "<INTERNAL_IP_VLAN20>"
       target_hostname: "existing-server"
     secrets: inherit
 ```
@@ -203,7 +203,7 @@ jobs:
 
 ```bash
 # SSH to VM
-ssh deploy@192.168.20.50
+ssh deploy@<INTERNAL_IP_VLAN20>
 
 # Check Tailscale status
 tailscale status
