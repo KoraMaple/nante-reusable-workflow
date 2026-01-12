@@ -109,7 +109,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@cffcb3a00cb97b3d8ed4cc42a69e4a8f9eb5d024 # v3
+        uses: dopplerhq/cli-action@v3 # v3
       
       - name: Configure Doppler
         run: |
