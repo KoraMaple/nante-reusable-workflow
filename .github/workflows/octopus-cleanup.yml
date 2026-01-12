@@ -39,12 +39,13 @@ permissions:
 jobs:
   check-runner-access:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       runner: ${{ steps.select-runner.outputs.runner }}
     steps:
       - name: Select runner based on org membership
         id: select-runner
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const requestedRunner = '${{ inputs.runner_type || 'github-hosted' }}';
@@ -98,17 +99,17 @@ jobs:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@cffcb3a00cb97b3d8ed4cc42a69e4a8f9eb5d024 # v3
       
       - name: Configure Doppler
         run: |

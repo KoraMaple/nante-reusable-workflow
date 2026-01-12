@@ -85,12 +85,13 @@ on:
 jobs:
   check-runner-access:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       runner: ${{ steps.select-runner.outputs.runner }}
     steps:
       - name: Select runner based on org membership
         id: select-runner
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const requestedRunner = '${{ inputs.runner_type }}';
@@ -144,21 +145,77 @@ jobs:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
+      - name: Validate inputs
+        run: |
+          set -e
+          
+          # Validate app_name (alphanumeric, hyphens, underscores only - max 63 chars for DNS compatibility)
+          APP_NAME="${{ inputs.app_name }}"
+          if [ -n "$APP_NAME" ]; then
+            if [[ ! "$APP_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_-]{0,62}$ ]]; then
+              echo "::error::app_name must start with a letter and contain only alphanumeric characters, hyphens, or underscores (max 63 chars)"
+              exit 1
+            fi
+            echo "✓ app_name validated: $APP_NAME"
+          fi
+          
+          # Validate VLAN tag (only allowed values)
+          VLAN_TAG="${{ inputs.vlan_tag }}"
+          if [ -n "$VLAN_TAG" ]; then
+            if [[ ! "$VLAN_TAG" =~ ^(10|20|30|40|50)$ ]]; then
+              echo "::error::vlan_tag must be one of: 10, 20, 30, 40, 50"
+              exit 1
+            fi
+            echo "✓ vlan_tag validated: $VLAN_TAG"
+          fi
+          
+          # Validate IP address format (if provided)
+          TARGET_IP="${{ inputs.vm_target_ip }}"
+          if [ -n "$TARGET_IP" ]; then
+            if [[ ! "$TARGET_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+              echo "::error::IP address format is invalid"
+              exit 1
+            fi
+            echo "✓ IP address format validated: $TARGET_IP"
+          fi
+          
+          # Validate environment (if provided)
+          ENV="${{ inputs.environment }}"
+          if [ -n "$ENV" ]; then
+            if [[ ! "$ENV" =~ ^(dev|staging|prod|development|production)$ ]]; then
+              echo "::error::environment must be one of: dev, staging, prod, development, production"
+              exit 1
+            fi
+            echo "✓ environment validated: $ENV"
+          fi
+          
+          # Validate resource_type (if provided)
+          RESOURCE_TYPE="${{ inputs.resource_type }}"
+          if [ -n "$RESOURCE_TYPE" ]; then
+            if [[ ! "$RESOURCE_TYPE" =~ ^(vm|lxc)$ ]]; then
+              echo "::error::resource_type must be either 'vm' or 'lxc'"
+              exit 1
+            fi
+            echo "✓ resource_type validated: $RESOURCE_TYPE"
+          fi
+          
+          echo "✓ All input validation passed"
+
       - name: Checkout Reusable Workflow Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           repository: KoraMaple/nante-reusable-workflow
           ref: develop
           token: ${{ secrets.GH_PAT }}
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@cffcb3a00cb97b3d8ed4cc42a69e4a8f9eb5d024 # v3
       
       - name: Configure Doppler
         run: |

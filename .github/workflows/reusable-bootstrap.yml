@@ -54,12 +54,13 @@ on:
 jobs:
   check-runner-access:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       runner: ${{ steps.select-runner.outputs.runner }}
     steps:
       - name: Select runner based on org membership
         id: select-runner
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const requestedRunner = '${{ inputs.runner_type }}';
@@ -112,21 +113,47 @@ jobs:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
+      - name: Validate inputs
+        run: |
+          set -e
+          
+          # Validate IP address format (if provided)
+          TARGET_IP="${{ inputs.target_ip }}"
+          if [ -n "$TARGET_IP" ]; then
+            if [[ ! "$TARGET_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+              echo "::error::IP address format is invalid"
+              exit 1
+            fi
+            echo "✓ IP address format validated: $TARGET_IP"
+          fi
+          
+          # Validate ssh_user (if provided - alphanumeric and underscores only)
+          SSH_USER="${{ inputs.ssh_user }}"
+          if [ -n "$SSH_USER" ]; then
+            if [[ ! "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+              echo "::error::ssh_user must be a valid Unix username"
+              exit 1
+            fi
+            echo "✓ ssh_user validated: $SSH_USER"
+          fi
+          
+          echo "✓ All input validation passed"
+
       - name: Checkout Reusable Workflow Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           repository: KoraMaple/nante-reusable-workflow
           ref: develop
           token: ${{ secrets.GH_PAT }}
           
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@cffcb3a00cb97b3d8ed4cc42a69e4a8f9eb5d024 # v3
       
       - name: Configure Doppler
         run: |
