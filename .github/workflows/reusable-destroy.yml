@@ -245,6 +245,7 @@ jobs:
           [ -n "$OCTOPUS_API_KEY" ] && echo "::add-mask::$OCTOPUS_API_KEY"
           [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
           [ -n "$TAILSCALE_AUTH_KEY" ] && echo "::add-mask::$TAILSCALE_AUTH_KEY"
+          [ -n "$MINIO_ENDPOINT" ] && echo "::add-mask::$MINIO_ENDPOINT"
           
           cd terraform/
           
