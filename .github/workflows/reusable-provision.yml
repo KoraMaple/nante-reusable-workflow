@@ -323,6 +323,7 @@ jobs:
           [ -n "$SONAR_TOKEN" ] && echo "::add-mask::$SONAR_TOKEN"
           [ -n "$TS_AUTHKEY" ] && echo "::add-mask::$TS_AUTHKEY"
           [ -n "$TAILSCALE_AUTH_KEY" ] && echo "::add-mask::$TAILSCALE_AUTH_KEY"
+          [ -n "$MINIO_ENDPOINT" ] && echo "::add-mask::$MINIO_ENDPOINT"
           
           # Verify credentials are available
           if [ -z "$MINIO_ROOT_USER" ] || [ -z "$MINIO_ROOT_PASSWORD" ]; then
@@ -630,7 +631,8 @@ jobs:
             if [ "${{ inputs.resource_type }}" = "lxc" ]; then
               VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
             else
-              VM_HOSTNAME=$(echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[0].value' 2>/dev/null || terraform output -raw vm_hostname 2>/dev/null || echo "")
+              # For VMs, extract from vm_hostnames JSON map (first entry)
+              VM_HOSTNAME=$(terraform output -json vm_hostnames 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null || echo "")
             fi
             if [ -n "$VM_HOSTNAME" ]; then
               echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
