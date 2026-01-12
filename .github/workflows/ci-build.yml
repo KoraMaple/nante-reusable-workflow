@@ -315,7 +315,7 @@ jobs:
       # Node Setup
       - name: Setup Node
         if: inputs.language == 'node'
-        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: ${{ inputs.language_version || '20' }}
           cache: ${{ inputs.build_tool || 'npm' }}
@@ -506,7 +506,7 @@ jobs:
 
       - name: Setup Node for analysis
         if: inputs.language == 'node'
-        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: ${{ inputs.language_version || '20' }}
 
