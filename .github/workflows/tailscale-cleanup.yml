@@ -49,13 +49,22 @@ jobs:
     steps:
       - name: Select runner based on org membership
         id: select-runner
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const requestedRunner = '${{ inputs.runner_type || 'github-hosted' }}';
             
             // Default to github-hosted
             let runner = 'ubuntu-latest';
+            
+            // SECURITY: Block external callers from using self-hosted runners
+            // This protects against old commit SHA references
+            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+              core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
+              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.setOutput('runner', 'ubuntu-latest');
+              return;
+            }
             
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
