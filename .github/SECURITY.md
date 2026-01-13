@@ -6,6 +6,19 @@
 
 **⚠️ WARNING**: This repository contains infrastructure automation workflows designed for **internal use**.
 
+### Self-Hosted Runner Protection
+
+This repository uses self-hosted runners for internal infrastructure automation. To prevent abuse:
+
+1. **External Callers**: When workflows are called from external repositories (even via commit SHA references), they are automatically forced to use GitHub-hosted runners
+2. **Org Membership**: Self-hosted runners are only available to KoraMaple organization members
+3. **Fork Protection**: Pull requests from forks cannot use self-hosted runners
+
+**How it works:**
+- All workflows check the repository context (`context.repo.owner` and `context.repo.repo`)
+- If called from outside `KoraMaple/nante-reusable-workflow`, the runner is forced to `ubuntu-latest`
+- This protection applies even when referencing old commit SHAs with hardcoded `runs-on: self-hosted`
+
 #### Safe Usage Guidelines
 
 ✅ **DO:**

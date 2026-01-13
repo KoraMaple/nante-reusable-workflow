@@ -57,6 +57,15 @@ jobs:
             // Default to github-hosted
             let runner = 'ubuntu-latest';
             
+            // SECURITY: Block external callers from using self-hosted runners
+            // This protects against old commit SHA references
+            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+              core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
+              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.setOutput('runner', 'ubuntu-latest');
+              return;
+            }
+            
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
