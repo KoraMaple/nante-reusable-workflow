@@ -17,6 +17,24 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Check Terraform is installed
+      shell: bash
+      run: |
+        if ! command -v terraform &> /dev/null; then
+          echo "❌ ERROR: Terraform is not installed"
+          echo ""
+          echo "For GitHub-hosted runners, add this step before calling this action:"
+          echo ""
+          echo "  - name: Install Terraform"
+          echo "    uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2"
+          echo "    with:"
+          echo "      terraform_wrapper: false"
+          echo ""
+          echo "For self-hosted runners, install Terraform on the runner."
+          exit 1
+        fi
+        echo "✓ Terraform $(terraform version -json | jq -r '.terraform_version') is installed"
+
     - name: Terraform Init
       shell: bash
       run: |

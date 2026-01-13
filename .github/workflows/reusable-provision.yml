@@ -280,6 +280,13 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3 # v3
       
+      # Install Terraform for GitHub-hosted runners (self-hosted runners have it pre-installed)
+      - name: Install Terraform
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2
+        with:
+          terraform_wrapper: false
+
       - name: Configure Doppler
         run: |
           doppler setup --project "${{ secrets.DOPPLER_TARGET_PROJECT }}" --config "${{ secrets.DOPPLER_TARGET_CONFIG }}" --no-interactive
