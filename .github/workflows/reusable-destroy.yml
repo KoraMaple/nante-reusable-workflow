@@ -101,7 +101,7 @@ jobs:
             
             // SECURITY: Block external callers from using self-hosted runners
             // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            if (context.repo.owner != 'KoraMaple' || context.repo.repo != 'nante-workflow-caller') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
               core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
               core.setOutput('runner', 'ubuntu-latest');
@@ -111,7 +111,7 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo != `${context.repo.owner}/${context.repo.repo}`) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
@@ -120,7 +120,7 @@ jobs:
             
             // If self-hosted requested, verify org membership
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
+              if (context.repo.owner != 'KoraMaple') {
                 core.warning('Self-hosted only available for KoraMaple org repos');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
