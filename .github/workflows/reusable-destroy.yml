@@ -244,11 +244,6 @@ jobs:
       # Install Terraform for GitHub-hosted runners (self-hosted runners have it pre-installed)
       - name: Install Terraform
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        run: |
-          echo "🔍 Debug: Runner type being used: ${{ needs.check-runner-access.outputs.runner }}"
-          echo "🔍 Debug: Runner OS: ${{ runner.os }}"
-          echo "🔍 Debug: Runner name: ${{ runner.name }}"
-
         uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
