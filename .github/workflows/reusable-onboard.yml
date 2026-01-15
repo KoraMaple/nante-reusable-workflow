@@ -90,7 +90,7 @@ jobs:
             
             // SECURITY: Block external callers from using self-hosted runners
             // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            if (context.repo.owner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
               core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
               core.setOutput('runner', 'ubuntu-latest');
