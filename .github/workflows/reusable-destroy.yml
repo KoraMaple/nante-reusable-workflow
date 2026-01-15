@@ -249,7 +249,7 @@ jobs:
           echo "🔍 Debug: Runner OS: ${{ runner.os }}"
           echo "🔍 Debug: Runner name: ${{ runner.name }}"
 
-        uses: hashicorp/setup-terraform@v3 # v3.1.2
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
 
