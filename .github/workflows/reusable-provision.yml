@@ -972,7 +972,7 @@ jobs:
             # Use Tailscale hostnames instead of IPs
             if [ -n "${{ inputs.instances }}" ]; then
               # Multi-instance mode - build inventory from hostnames
-              HOSTNAMES=$(echo '${{ env.VM_HOSTNAMES_JSON }}' | jq -r '.[] | select(. != null and . != "")' | tr '\n' ',')
+              HOSTNAMES=$(echo "${{ env.VM_HOSTNAMES_JSON }}" | jq -r '.[] | select(. != null and . != "")' | tr '\n' ',')
               INVENTORY="${HOSTNAMES}"
               echo "Multi-instance inventory (Tailscale): $INVENTORY"
             else
@@ -991,7 +991,7 @@ jobs:
             # Use local IPs
             if [ -n "${{ inputs.instances }}" ]; then
               # Multi-instance mode - build inventory from instances
-              TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ',')
+              TARGET_IPS=$(echo "${{ inputs.instances }}" | jq -r '.[] | .ip_address' | tr '\n' ',')
               INVENTORY="${TARGET_IPS}"
               echo "Multi-instance inventory (local): $INVENTORY"
             else
