@@ -164,7 +164,7 @@ jobs:
             
             // SECURITY: Block external callers from using self-hosted runners
             // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            if (context.repo.owner != 'KoraMaple' || context.repo.repo != 'nante-workflow-caller') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
               core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
               core.setOutput('runner', 'ubuntu-latest');
@@ -174,7 +174,7 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo != `${context.repo.owner}/${context.repo.repo}`) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
@@ -183,7 +183,7 @@ jobs:
             
             // If self-hosted requested, verify org membership
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
+              if (context.repo.owner != 'KoraMaple') {
                 core.warning('Self-hosted only available for KoraMaple org repos');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
@@ -217,11 +217,11 @@ jobs:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
+        uses: tailscale/github-action@v4 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-          tags: ${{ inputs.tailscale_tags }}
+          tags: ${{ inputs.tailscale_tags || 'tag:ci' }}
 
       - name: Validate inputs
         run: |
