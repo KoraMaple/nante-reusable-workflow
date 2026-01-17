@@ -638,7 +638,7 @@ jobs:
             mkdir -p /tmp/tailscale-provision-$$
             cd /tmp/tailscale-provision-$$
             
-            cat > main.tf <<'TSEOF'
+            cat > main.tf <<TSEOF
           terraform {
             required_providers {
               tailscale = {
@@ -661,6 +661,7 @@ jobs:
             preauthorized = true
             expiry        = 7776000  # 90 days
             description   = "Provision key for ${{ inputs.app_name }}"
+            tags          = ["tag:proxmox-vm", "tag:${{ inputs.environment }}"]
           }
           
           output "auth_key" {
