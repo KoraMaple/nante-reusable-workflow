@@ -683,20 +683,98 @@ jobs:
 
       - name: Wait for VM to boot and SSH to be ready
         run: |
-          # Determine target IPs based on deployment mode
-          if [ -n "${{ inputs.instances }}" ]; then
-            # Multi-instance mode - extract IPs from instances JSON
-            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ' ')
-            echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
-          else
-            # Single-instance mode
-            TARGET_IPS="${{ inputs.vm_target_ip }}"
-            echo "Single-instance mode: waiting for ${{ inputs.resource_type }} at $TARGET_IPS"
-          fi
+          # For GitHub-hosted runners, wait for Tailscale connectivity
+          # For self-hosted runners, wait for local IP connectivity
+          RUNNER_TYPE="${{ needs.check-runner-access.outputs.runner }}"
           
-          # Wait for each IP
-          for TARGET_IP in $TARGET_IPS; do
-            echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
+          if [ "$RUNNER_TYPE" = "ubuntu-latest" ]; then
+            echo "GitHub-hosted runner detected - will wait for Tailscale connectivity"
+            
+            # Get hostnames from environment
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode
+              HOSTNAMES=$(echo '${{ env.VM_HOSTNAMES_JSON }}' | jq -r '.[] | select(. != null and . != "")' | tr '\n' ' ')
+              echo "Multi-instance mode: waiting for Tailscale hostnames: $HOSTNAMES"
+            else
+              # Single-instance mode
+              HOSTNAMES="${{ env.VM_HOSTNAME }}"
+              echo "Single-instance mode: waiting for Tailscale hostname: $HOSTNAMES"
+            fi
+            
+            if [ -z "$HOSTNAMES" ] || [ "$HOSTNAMES" = "null" ]; then
+              echo "❌ ERROR: No Tailscale hostnames available"
+              echo "VM_HOSTNAME: ${{ env.VM_HOSTNAME }}"
+              echo "VM_HOSTNAMES_JSON: ${{ env.VM_HOSTNAMES_JSON }}"
+              exit 1
+            fi
+            
+            # Wait for each hostname to be reachable via Tailscale
+            for HOSTNAME in $HOSTNAMES; do
+              echo "Waiting for ${{ inputs.resource_type }} at $HOSTNAME to join Tailscale..."
+              
+              # Wait up to 5 minutes for Tailscale connectivity
+              TAILSCALE_SUCCESS=false
+              MAX_ATTEMPTS=60
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if ping -c 1 -W 2 "$HOSTNAME" &>/dev/null; then
+                  echo "✓ $HOSTNAME is reachable via Tailscale (attempt $i)"
+                  TAILSCALE_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: $HOSTNAME not yet on Tailscale, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$TAILSCALE_SUCCESS" = false ]; then
+                echo "❌ ERROR: $HOSTNAME did not join Tailscale after 5 minutes"
+                echo "Check that:"
+                echo "  1. VM/CT was created successfully in Proxmox"
+                echo "  2. Tailscale installation completed (check cloud-init logs)"
+                echo "  3. TAILSCALE_AUTH_KEY is valid"
+                echo "  4. VM/CT has internet connectivity"
+                exit 1
+              fi
+              
+              # Wait for SSH on Tailscale hostname
+              echo "Waiting for SSH on $HOSTNAME..."
+              SSH_SUCCESS=false
+              MAX_ATTEMPTS=24
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if nc -z -w 2 "$HOSTNAME" 22 2>/dev/null; then
+                  echo "✓ SSH port at $HOSTNAME is open (attempt $i)"
+                  SSH_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: SSH at $HOSTNAME not ready, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$SSH_SUCCESS" = false ]; then
+                echo "❌ ERROR: SSH port at $HOSTNAME did not open after 2 minutes"
+                exit 1
+              fi
+              
+              echo "✓ $HOSTNAME is ready for Ansible configuration"
+            done
+          else
+            echo "Self-hosted runner detected - will use local IP connectivity"
+            
+            # Determine target IPs based on deployment mode
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - extract IPs from instances JSON
+              TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ' ')
+              echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
+            else
+              # Single-instance mode
+              TARGET_IPS="${{ inputs.vm_target_ip }}"
+              echo "Single-instance mode: waiting for ${{ inputs.resource_type }} at $TARGET_IPS"
+            fi
+            
+            # Wait for each IP
+            for TARGET_IP in $TARGET_IPS; do
+              echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
           
           # Wait up to 3 minutes for the resource to respond to ping
           PING_SUCCESS=false
@@ -798,22 +876,48 @@ jobs:
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # Determine target IPs for Ansible
-          if [ -n "${{ inputs.instances }}" ]; then
-            # Multi-instance mode - build inventory from instances
-            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ',')
-            INVENTORY="${TARGET_IPS}"
-            echo "Multi-instance inventory: $INVENTORY"
-          else
-            # Single-instance mode
-            INVENTORY="${{ inputs.vm_target_ip }},"
-            echo "Single-instance inventory: $INVENTORY"
-          fi
+          # Determine Ansible inventory based on runner type
+          RUNNER_TYPE="${{ needs.check-runner-access.outputs.runner }}"
           
-          # Clean up old SSH host keys to prevent conflicts
-          for IP in $(echo "$INVENTORY" | tr ',' ' '); do
-            [ -n "$IP" ] && ssh-keygen -R "$IP" 2>/dev/null || true
-          done
+          if [ "$RUNNER_TYPE" = "ubuntu-latest" ]; then
+            echo "GitHub-hosted runner - using Tailscale hostnames for Ansible"
+            
+            # Use Tailscale hostnames instead of IPs
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - build inventory from hostnames
+              HOSTNAMES=$(echo '${{ env.VM_HOSTNAMES_JSON }}' | jq -r '.[] | select(. != null and . != "")' | tr '\n' ',')
+              INVENTORY="${HOSTNAMES}"
+              echo "Multi-instance inventory (Tailscale): $INVENTORY"
+            else
+              # Single-instance mode
+              INVENTORY="${{ env.VM_HOSTNAME }},"
+              echo "Single-instance inventory (Tailscale): $INVENTORY"
+            fi
+            
+            # Clean up old SSH host keys for Tailscale hostnames
+            for HOST in $(echo "$INVENTORY" | tr ',' ' '); do
+              [ -n "$HOST" ] && ssh-keygen -R "$HOST" 2>/dev/null || true
+            done
+          else
+            echo "Self-hosted runner - using local IP addresses for Ansible"
+            
+            # Use local IPs
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - build inventory from instances
+              TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ',')
+              INVENTORY="${TARGET_IPS}"
+              echo "Multi-instance inventory (local): $INVENTORY"
+            else
+              # Single-instance mode
+              INVENTORY="${{ inputs.vm_target_ip }},"
+              echo "Single-instance inventory (local): $INVENTORY"
+            fi
+            
+            # Clean up old SSH host keys for IPs
+            for IP in $(echo "$INVENTORY" | tr ',' ' '); do
+              [ -n "$IP" ] && ssh-keygen -R "$IP" 2>/dev/null || true
+            done
+          fi
           
           # Determine Ansible user based on resource type
           # VMs use cloud-init to create 'deploy' user
