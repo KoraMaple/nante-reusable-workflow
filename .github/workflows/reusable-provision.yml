@@ -780,7 +780,7 @@ jobs:
             # Get hostnames from environment
             if [ -n "${{ inputs.instances }}" ]; then
               # Multi-instance mode
-              HOSTNAMES=$(echo '${{ env.VM_HOSTNAMES_JSON }}' | jq -r '.[] | select(. != null and . != "")' | tr '\n' ' ')
+              HOSTNAMES=$(echo "${{ env.VM_HOSTNAMES_JSON }}" | jq -r '.[] | select(. != null and . != "")' | tr '\n' ' ')
               echo "Multi-instance mode: waiting for Tailscale hostnames: $HOSTNAMES"
             else
               # Single-instance mode
@@ -851,7 +851,7 @@ jobs:
             # Determine target IPs based on deployment mode
             if [ -n "${{ inputs.instances }}" ]; then
               # Multi-instance mode - extract IPs from instances JSON
-              TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ' ')
+              TARGET_IPS=$(echo "${{ inputs.instances }}" | jq -r '.[] | .ip_address' | tr '\n' ' ')
               echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
             else
               # Single-instance mode
