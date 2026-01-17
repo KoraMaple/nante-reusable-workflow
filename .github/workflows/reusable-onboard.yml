@@ -198,7 +198,7 @@ jobs:
       # Required for generating Tailscale auth keys via Terraform provider
       - name: Install Terraform
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
 
