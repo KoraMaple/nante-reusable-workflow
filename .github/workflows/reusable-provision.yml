@@ -327,6 +327,56 @@ jobs:
             echo "✓ VLAN $VLAN and IP $IP are valid"
           fi
 
+      - name: Verify Tailscale connectivity to MinIO
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          echo "Verifying Tailscale connectivity to MinIO backend..."
+          
+          # Extract hostname from MINIO_ENDPOINT
+          MINIO_HOST=$(echo "$MINIO_ENDPOINT" | sed -E 's|https?://([^:/]+).*|\1|')
+          
+          if [ -z "$MINIO_HOST" ]; then
+            echo "❌ ERROR: Could not extract MinIO hostname from MINIO_ENDPOINT"
+            echo "MINIO_ENDPOINT: $MINIO_ENDPOINT"
+            exit 1
+          fi
+          
+          echo "MinIO host: $MINIO_HOST"
+          
+          # Check if host is reachable via Tailscale
+          MAX_ATTEMPTS=30
+          CONNECTED=false
+          
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            if ping -c 1 -W 2 "$MINIO_HOST" &>/dev/null; then
+              echo "✓ MinIO host $MINIO_HOST is reachable via Tailscale (attempt $i)"
+              CONNECTED=true
+              break
+            fi
+            echo "Attempt $i/$MAX_ATTEMPTS: Waiting for Tailscale connectivity to $MINIO_HOST..."
+            sleep 2
+          done
+          
+          if [ "$CONNECTED" = false ]; then
+            echo "❌ ERROR: Cannot reach MinIO host $MINIO_HOST via Tailscale after 60 seconds"
+            echo "Check that:"
+            echo "  1. Tailscale connection is active (should have connected in previous step)"
+            echo "  2. MinIO server is running and accessible on your Tailnet"
+            echo "  3. MINIO_ENDPOINT in Doppler is correct: $MINIO_ENDPOINT"
+            echo ""
+            echo "Tailscale status:"
+            tailscale status || echo "Could not get Tailscale status"
+            exit 1
+          fi
+          
+          echo "✓ Tailscale connectivity to MinIO verified"
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
       - name: Terraform Init, Plan, and Apply
         if: ${{ inputs.skip_terraform != true }}
         run: |
