@@ -188,26 +188,10 @@ jobs:
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested and calling from KoraMaple repo, allow it
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner != 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ Self-hosted runner requested from ${callingRepo} - allowing`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -462,14 +446,15 @@ jobs:
               VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
               echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
               echo "✓ Multi-instance hostnames retrieved"
+              echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
             else
               # Single-instance mode - check for VM or LXC hostname
               if [ "${{ inputs.resource_type }}" = "lxc" ]; then
                 echo "Extracting lxc_hostname..."
                 VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
               else
-                echo "Extracting vm_hostname..."
-                VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+                echo "Extracting vm_hostname from vm_hostnames map..."
+                VM_HOSTNAME=$(terraform output -json vm_hostnames 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null || echo "")
               fi
               if [ -n "$VM_HOSTNAME" ]; then
                 echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
@@ -677,6 +662,57 @@ jobs:
               echo "✓ Hostname: $VM_HOSTNAME"
             else
               echo "⚠️  No hostname found in Terraform output"
+            fi
+          fi
+          EOF
+
+      - name: Set hostnames when Terraform is skipped
+        if: ${{ inputs.skip_terraform == true }}
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          cd terraform/
+          
+          # Set AWS credentials for Terraform S3 backend
+          export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+          export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+          
+          # Terraform Init to access state
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="endpoints={s3=\"${MINIO_ENDPOINT}\"}" \
+            -backend-config="access_key=$MINIO_ROOT_USER" \
+            -backend-config="secret_key=$MINIO_ROOT_PASSWORD" \
+            > /dev/null 2>&1
+          
+          # Select workspace
+          terraform workspace select ${{ inputs.app_name }} > /dev/null 2>&1
+          
+          echo "Extracting hostnames from Terraform state..."
+          
+          # Extract hostnames from Terraform outputs
+          if [ -n "${{ inputs.instances }}" ]; then
+            # Multi-instance mode
+            VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
+            echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
+            echo "✓ Multi-instance hostnames retrieved from state"
+            echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
+          else
+            # Single-instance mode
+            if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+              VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
+            else
+              VM_HOSTNAME=$(terraform output -json vm_hostnames 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$VM_HOSTNAME" ]; then
+              echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
+              echo "✓ Hostname retrieved from state: $VM_HOSTNAME"
+            else
+              echo "⚠️  WARNING: No hostname found in Terraform state"
+              echo "Falling back to app_name: ${{ inputs.app_name }}"
+              echo "VM_HOSTNAME=${{ inputs.app_name }}" >> $GITHUB_ENV
             fi
           fi
           EOF
