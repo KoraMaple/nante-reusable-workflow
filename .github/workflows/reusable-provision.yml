@@ -1067,7 +1067,7 @@ jobs:
           # Get VM hostnames from environment (set in previous step)
           if [ -n "${{ inputs.instances }}" ]; then
             # Multi-instance mode - hostnames are in JSON map
-            VM_HOSTNAMES_JSON='${{ env.VM_HOSTNAMES_JSON }}'
+            VM_HOSTNAMES_JSON="${{ env.VM_HOSTNAMES_JSON }}"
             echo "✓ Using multi-instance hostnames from Terraform"
           else
             # Single-instance mode
