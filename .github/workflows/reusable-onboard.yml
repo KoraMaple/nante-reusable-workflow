@@ -24,6 +24,11 @@ on:
         type: string
         description: 'Hostname to set'
         required: true
+      environment:
+        type: string
+        description: 'Environment (dev, staging, prod)'
+        required: false
+        default: 'dev'
       ansible_roles:
         type: string
         description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
@@ -240,6 +245,7 @@ jobs:
             preauthorized = true
             expiry        = 7776000  # 90 days
             description   = "Onboarding key for ${{ inputs.target_hostname }}"
+            tags          = ["tag:proxmox-vm", "tag:${{ inputs.environment }}"]
           }
           
           output "auth_key" {
