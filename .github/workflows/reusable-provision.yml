@@ -524,6 +524,14 @@ jobs:
           export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
           export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
           
+          # Verify SSH public key is set
+          if [ -z "$ANS_SSH_PUBLIC_KEY" ]; then
+            echo "❌ ERROR: ANS_SSH_PUBLIC_KEY not found in Doppler"
+            echo "This key is required for SSH access to the VM"
+            exit 1
+          fi
+          echo "✓ SSH public key configured for cloud-init (length: ${#ANS_SSH_PUBLIC_KEY} chars)"
+          
           # Set Tailscale credentials for Terraform provider
           export TAILSCALE_OAUTH_CLIENT_ID="$TAILSCALE_OAUTH_CLIENT_ID"
           export TAILSCALE_OAUTH_CLIENT_SECRET="$TAILSCALE_OAUTH_CLIENT_SECRET"
@@ -958,6 +966,10 @@ jobs:
           # Setup SSH agent with key from Doppler
           eval $(ssh-agent -s)
           echo "$SSH_PRIVATE_KEY" | ssh-add -
+          
+          # Show SSH key fingerprint for debugging
+          echo "SSH key fingerprint being used:"
+          ssh-add -l
           
           cd ansible/
           
