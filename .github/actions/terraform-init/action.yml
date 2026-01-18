@@ -26,7 +26,7 @@ runs:
           echo "For GitHub-hosted runners, add this step before calling this action:"
           echo ""
           echo "  - name: Install Terraform"
-          echo "    uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2"
+          echo "    uses: hashicorp/setup-terraform@v3.1.2"
           echo "    with:"
           echo "      terraform_wrapper: false"
           echo ""

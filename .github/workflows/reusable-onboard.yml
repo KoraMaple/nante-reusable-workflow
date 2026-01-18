@@ -24,6 +24,11 @@ on:
         type: string
         description: 'Hostname to set'
         required: true
+      environment:
+        type: string
+        description: 'Environment (dev, staging, prod)'
+        required: false
+        default: 'dev'
       ansible_roles:
         type: string
         description: 'Comma-separated list of Ansible roles to apply (e.g., nginx,mgmt-docker). base_setup always runs by default unless mgmt-docker is specified.'
@@ -89,10 +94,17 @@ jobs:
             let runner = 'ubuntu-latest';
             
             // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // For reusable workflows, check the calling repository owner
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -107,26 +119,10 @@ jobs:
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested and calling from KoraMaple repo, allow it
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ Self-hosted runner requested from ${callingRepo} - allowing`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -142,7 +138,7 @@ jobs:
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
+        uses: tailscale/github-action@v4 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
@@ -198,7 +194,7 @@ jobs:
       # Required for generating Tailscale auth keys via Terraform provider
       - name: Install Terraform
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
 
@@ -249,6 +245,7 @@ jobs:
             preauthorized = true
             expiry        = 7776000  # 90 days
             description   = "Onboarding key for ${{ inputs.target_hostname }}"
+            tags          = ["tag:proxmox-vm", "tag:${{ inputs.environment }}"]
           }
           
           output "auth_key" {

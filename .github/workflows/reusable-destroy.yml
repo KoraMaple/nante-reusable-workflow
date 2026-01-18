@@ -100,10 +100,17 @@ jobs:
             let runner = 'ubuntu-latest';
             
             // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // For reusable workflows, check the calling repository owner
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -111,33 +118,17 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo != `${context.repo.owner}/${context.repo.repo}`) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested and calling from KoraMaple repo, allow it
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ Self-hosted runner requested from ${callingRepo} - allowing`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -151,10 +142,26 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug Tailscale secrets presence
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
+        run: |
+          echo "ID='${{ secrets.TS_OAUTH_CLIENT_ID }}'"
+          echo "SECRET set? ${{ secrets.TS_OAUTH_CLIENT_SECRET != '' }}"
+          if [ -z "${{ secrets.TS_OAUTH_CLIENT_ID }}" ]; then
+            echo "::error::TS_OAUTH_CLIENT_ID is empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.TS_OAUTH_CLIENT_SECRET }}" ]; then
+            echo "::error::TS_OAUTH_CLIENT_SECRET is empty"
+            exit 1
+          fi
+
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
+        uses: tailscale/github-action@v4 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
@@ -229,7 +236,7 @@ jobs:
       # Install Terraform for GitHub-hosted runners (self-hosted runners have it pre-installed)
       - name: Install Terraform
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
 
