@@ -862,85 +862,86 @@ jobs:
             # Wait for each IP
             for TARGET_IP in $TARGET_IPS; do
               echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
-          
-          # Wait up to 3 minutes for the resource to respond to ping
-          PING_SUCCESS=false
-          MAX_ATTEMPTS=36
-          # LXC containers boot much faster, reduce wait time
-          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            MAX_ATTEMPTS=12  # 1 minute for LXC
-          fi
-          
-            for i in $(seq 1 $MAX_ATTEMPTS); do
-              if ping -c 1 -W 2 $TARGET_IP &>/dev/null; then
-                echo "✓ ${{ inputs.resource_type }} at $TARGET_IP is responding to ping (attempt $i)"
-                PING_SUCCESS=true
-                break
-              fi
-              echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} at $TARGET_IP not yet reachable, waiting 5s..."
-              sleep 5
-            done
-          
-            if [ "$PING_SUCCESS" = false ]; then
-              echo "❌ ERROR: ${{ inputs.resource_type }} at $TARGET_IP did not respond to ping"
-              echo "Check that:"
-              echo "  1. Resource was created successfully in Proxmox"
-              if [ "${{ inputs.resource_type }}" = "vm" ]; then
-                echo "  2. Cloud-init completed (check VM console)"
-              fi
-              echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-              echo "  4. IP $TARGET_IP is not already in use"
-              exit 1
-            fi
-          
-          # Wait for SSH port to be open
-          # LXC containers (especially RHEL-based) may take longer to start SSH
-          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            MAX_ATTEMPTS=36  # 3 minutes for LXC
-            echo "Waiting for SSH port 22 (LXC may take up to 3 minutes)..."
-          else
-            MAX_ATTEMPTS=24  # 2 minutes for VMs
-            echo "Waiting for SSH port 22..."
-          fi
-          
-            SSH_SUCCESS=false
-            for i in $(seq 1 $MAX_ATTEMPTS); do
-              if nc -z -w 2 $TARGET_IP 22 2>/dev/null; then
-                echo "✓ SSH port at $TARGET_IP is open (attempt $i)"
-                SSH_SUCCESS=true
-                break
-              fi
-              echo "Attempt $i/$MAX_ATTEMPTS: SSH at $TARGET_IP not ready, waiting 5s..."
-              sleep 5
-            done
-          
-            if [ "$SSH_SUCCESS" = false ]; then
+              
+              # Wait up to 3 minutes for the resource to respond to ping
+              PING_SUCCESS=false
+              MAX_ATTEMPTS=36
+              # LXC containers boot much faster, reduce wait time
               if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 3 minutes"
-                echo "Check that:"
-                echo "  1. LXC container started successfully in Proxmox"
-                echo "  2. SSH service is installed and enabled (systemctl status sshd)"
-                echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-                echo "  4. Firewall is not blocking port 22"
-              else
-                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 2 minutes"
-                echo "Check that:"
-                echo "  1. Cloud-init completed successfully"
-                echo "  2. SSH service is running"
-                echo "  3. Firewall is not blocking port 22"
+                MAX_ATTEMPTS=12  # 1 minute for LXC
               fi
-              exit 1
-            fi
-            
-            # Additional wait for cloud-init to fully complete (VMs only)
-            if [ "${{ inputs.resource_type }}" = "vm" ]; then
-              echo "Waiting 15s for cloud-init to complete on $TARGET_IP..."
-              sleep 15
-              echo "✓ VM at $TARGET_IP is ready for Ansible configuration"
-            else
-              echo "✓ LXC container at $TARGET_IP is ready for Ansible configuration"
-            fi
-          done
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if ping -c 1 -W 2 $TARGET_IP &>/dev/null; then
+                  echo "✓ ${{ inputs.resource_type }} at $TARGET_IP is responding to ping (attempt $i)"
+                  PING_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} at $TARGET_IP not yet reachable, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$PING_SUCCESS" = false ]; then
+                echo "❌ ERROR: ${{ inputs.resource_type }} at $TARGET_IP did not respond to ping"
+                echo "Check that:"
+                echo "  1. Resource was created successfully in Proxmox"
+                if [ "${{ inputs.resource_type }}" = "vm" ]; then
+                  echo "  2. Cloud-init completed (check VM console)"
+                fi
+                echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+                echo "  4. IP $TARGET_IP is not already in use"
+                exit 1
+              fi
+              
+              # Wait for SSH port to be open
+              # LXC containers (especially RHEL-based) may take longer to start SSH
+              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                MAX_ATTEMPTS=36  # 3 minutes for LXC
+                echo "Waiting for SSH port 22 (LXC may take up to 3 minutes)..."
+              else
+                MAX_ATTEMPTS=24  # 2 minutes for VMs
+                echo "Waiting for SSH port 22..."
+              fi
+              
+              SSH_SUCCESS=false
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if nc -z -w 2 $TARGET_IP 22 2>/dev/null; then
+                  echo "✓ SSH port at $TARGET_IP is open (attempt $i)"
+                  SSH_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: SSH at $TARGET_IP not ready, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$SSH_SUCCESS" = false ]; then
+                if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                  echo "❌ ERROR: SSH port at $TARGET_IP did not open after 3 minutes"
+                  echo "Check that:"
+                  echo "  1. LXC container started successfully in Proxmox"
+                  echo "  2. SSH service is installed and enabled (systemctl status sshd)"
+                  echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+                  echo "  4. Firewall is not blocking port 22"
+                else
+                  echo "❌ ERROR: SSH port at $TARGET_IP did not open after 2 minutes"
+                  echo "Check that:"
+                  echo "  1. Cloud-init completed successfully"
+                  echo "  2. SSH service is running"
+                  echo "  3. Firewall is not blocking port 22"
+                fi
+                exit 1
+              fi
+              
+              # Additional wait for cloud-init to fully complete (VMs only)
+              if [ "${{ inputs.resource_type }}" = "vm" ]; then
+                echo "Waiting 15s for cloud-init to complete on $TARGET_IP..."
+                sleep 15
+                echo "✓ VM at $TARGET_IP is ready for Ansible configuration"
+              else
+                echo "✓ LXC container at $TARGET_IP is ready for Ansible configuration"
+              fi
+            done
+          fi
 
       - name: Run Ansible with Doppler
         env:
