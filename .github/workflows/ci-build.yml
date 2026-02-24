@@ -582,7 +582,7 @@ jobs:
 
       - name: SonarQube/SonarCloud Scan
         if: steps.check-sonar.outputs.skip == 'false'
-        uses: sonarsource/sonarqube-scan-action@v4.0.0
+        uses: sonarsource/sonarqube-scan-action@v6
         with:
           projectBaseDir: ${{ inputs.working_directory }}
         env:
