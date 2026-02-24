@@ -69,10 +69,17 @@ jobs:
             let runner = 'ubuntu-latest';
             
             // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // For reusable workflows, check the calling repository owner
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -87,26 +94,10 @@ jobs:
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested and calling from KoraMaple repo, allow it
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ Self-hosted runner requested from ${callingRepo} - allowing`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);

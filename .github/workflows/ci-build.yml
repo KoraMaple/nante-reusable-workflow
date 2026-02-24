@@ -81,11 +81,6 @@ on:
         required: true
       DOPPLER_TARGET_CONFIG:
         required: true
-      # Optional: Required for GitHub-hosted runners with Tailscale
-      TS_OAUTH_CLIENT_ID:
-        required: false
-      TS_OAUTH_CLIENT_SECRET:
-        required: false
 
 jobs:
   check-runner-access:
@@ -104,11 +99,18 @@ jobs:
             // Default to github-hosted
             let runner = 'ubuntu-latest';
             
-            // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // SECURITY: Check the calling repository owner
+            // For reusable workflows, context.payload.repository is the calling repo
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -116,33 +118,17 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo !== callingRepo) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested, allow it for KoraMaple repos
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ ${callingRepo} is a KoraMaple repository - self-hosted allowed`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -157,6 +143,8 @@ jobs:
       NEXUS_PASSWORD: ${{ steps.get-secrets.outputs.NEXUS_PASSWORD }}
       SONAR_URL: ${{ steps.get-secrets.outputs.SONAR_URL }}
       SONAR_TOKEN: ${{ steps.get-secrets.outputs.SONAR_TOKEN }}
+      TS_OAUTH_CLIENT_ID: ${{ steps.get-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_CLIENT_SECRET: ${{ steps.get-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
     steps:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3 # v3
@@ -176,8 +164,11 @@ jobs:
           set -e
           
           # Mask sensitive values to prevent log exposure
+          # Note: SONAR_TOKEN is NOT masked here so it can be passed via job outputs
+          # It will be masked in the consuming jobs instead
           if [ -n "$NEXUS_PASSWORD" ]; then echo "::add-mask::$NEXUS_PASSWORD"; fi
-          if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_ID" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_ID"; fi
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
           
           # Export secrets as outputs (passwords are masked above)
           echo "NEXUS_URL=${NEXUS_URL:-}" >> $GITHUB_OUTPUT
@@ -185,6 +176,8 @@ jobs:
           echo "NEXUS_PASSWORD=${NEXUS_PASSWORD:-}" >> $GITHUB_OUTPUT
           echo "SONAR_URL=${SONAR_URL:-}" >> $GITHUB_OUTPUT
           echo "SONAR_TOKEN=${SONAR_TOKEN:-}" >> $GITHUB_OUTPUT
+          echo "TS_OAUTH_CLIENT_ID=${TAILSCALE_OAUTH_CLIENT_ID:-}" >> $GITHUB_OUTPUT
+          echo "TS_OAUTH_CLIENT_SECRET=${TAILSCALE_OAUTH_CLIENT_SECRET:-}" >> $GITHUB_OUTPUT
           
           # Log what was found (without values)
           [ -n "${NEXUS_URL:-}" ] && echo "✓ NEXUS_URL found" || echo "⚠️  NEXUS_URL not found"
@@ -192,6 +185,8 @@ jobs:
           [ -n "${NEXUS_PASSWORD:-}" ] && echo "✓ NEXUS_PASSWORD found" || echo "⚠️  NEXUS_PASSWORD not found"
           [ -n "${SONAR_URL:-}" ] && echo "✓ SONAR_URL found" || echo "⚠️  SONAR_URL not found"
           [ -n "${SONAR_TOKEN:-}" ] && echo "✓ SONAR_TOKEN found" || echo "⚠️  SONAR_TOKEN not found"
+          [ -n "${TAILSCALE_OAUTH_CLIENT_ID:-}" ] && echo "✓ TAILSCALE_OAUTH_CLIENT_ID found" || echo "⚠️  TAILSCALE_OAUTH_CLIENT_ID not found"
+          [ -n "${TAILSCALE_OAUTH_CLIENT_SECRET:-}" ] && echo "✓ TAILSCALE_OAUTH_CLIENT_SECRET found" || echo "⚠️  TAILSCALE_OAUTH_CLIENT_SECRET not found"
           EOF
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -202,11 +197,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Connect to Tailscale
-        if: inputs.use_tailscale == true
+        if: inputs.use_tailscale == true && needs.check-runner-access.outputs.runner == 'ubuntu-latest'
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
       - name: Validate inputs
@@ -486,11 +481,11 @@ jobs:
     if: inputs.run_sonar_scan == true
     steps:
       - name: Connect to Tailscale
-        if: inputs.use_tailscale == true
+        if: inputs.use_tailscale == true && needs.check-runner-access.outputs.runner == 'ubuntu-latest'
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
       - name: Checkout caller repository
@@ -526,73 +521,93 @@ jobs:
           java-version: ${{ inputs.language_version || '17' }}
           distribution: 'temurin'
 
-      - name: SonarQube/SonarCloud Scan
-        working-directory: ${{ inputs.working_directory }}
-        env:
-          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
-          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+      - name: Check SonarQube credentials
+        id: check-sonar
         run: |
-          set -e
-          
-          # Check if SonarQube/SonarCloud credentials are available
-          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
+          if [ -z "${{ needs.fetch-secrets.outputs.SONAR_URL }}" ] || [ -z "${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
             echo "⚠️  WARNING: SonarQube/SonarCloud credentials not found in Doppler"
             echo "Skipping code scan. To enable:"
             echo "  - Self-hosted SonarQube: Add SONAR_URL and SONAR_TOKEN to Doppler"
             echo "  - SonarCloud: Set SONAR_URL=https://sonarcloud.io and add SONAR_TOKEN to Doppler"
-            exit 0
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "✓ SonarQube credentials found"
           fi
-          
-          echo "🔍 Running SonarQube/SonarCloud scan..."
-          
-          # Install sonar-scanner if not available
-          if ! command -v sonar-scanner &> /dev/null; then
-            echo "Installing sonar-scanner..."
-            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-            unzip -q sonar-scanner-cli-5.0.1.3006-linux.zip
-            export PATH="$PWD/sonar-scanner-5.0.1.3006-linux/bin:$PATH"
-            echo "✓ sonar-scanner installed"
+
+      - name: Create sonar-project.properties
+        if: steps.check-sonar.outputs.skip == 'false'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          # Create sonar-project.properties if it doesn't exist
+          if [ ! -f "sonar-project.properties" ]; then
+            echo "Creating sonar-project.properties..."
+            
+            # Extract org and repo from GitHub context
+            REPO_FULL_NAME="${{ github.repository }}"
+            PROJECT_KEY="${REPO_FULL_NAME//\//_}"
+            
+            echo "Using project key: $PROJECT_KEY"
+            
+            cat > sonar-project.properties <<EOF
+          sonar.projectKey=$PROJECT_KEY
+          sonar.projectName=${{ inputs.app_name }}
+          sonar.sources=.
+          sonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/**
+          sonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/**
+          EOF
+            
+            # Add language-specific coverage paths
+            case "${{ inputs.language }}" in
+              go)
+                if [ -f "coverage.out" ]; then
+                  echo "sonar.go.coverage.reportPaths=coverage.out" >> sonar-project.properties
+                fi
+                ;;
+              python)
+                if [ -f "coverage.xml" ]; then
+                  echo "sonar.python.coverage.reportPaths=coverage.xml" >> sonar-project.properties
+                fi
+                ;;
+              java)
+                if [ -d "target/site/jacoco" ]; then
+                  echo "sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml" >> sonar-project.properties
+                fi
+                ;;
+            esac
+            
+            # Add SonarCloud organization if provided
+            if [ -n "${{ inputs.sonar_organization }}" ]; then
+              echo "sonar.organization=${{ inputs.sonar_organization }}" >> sonar-project.properties
+              echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
+            fi
+            
+            echo "✓ Generated sonar-project.properties"
+          else
+            echo "✓ Using existing sonar-project.properties"
           fi
-          
-          # Prepare language-specific parameters
-          EXTRA_PARAMS=""
-          case "${{ inputs.language }}" in
-            go)
-              # Add Go coverage if available
-              if [ -f "coverage.out" ]; then
-                EXTRA_PARAMS="-Dsonar.go.coverage.reportPaths=coverage.out"
-              fi
-              ;;
-            python)
-              # Add Python coverage if available
-              if [ -f "coverage.xml" ]; then
-                EXTRA_PARAMS="-Dsonar.python.coverage.reportPaths=coverage.xml"
-              fi
-              ;;
-            java)
-              # Maven/Gradle generate coverage automatically
-              if [ -d "target/site/jacoco" ]; then
-                EXTRA_PARAMS="-Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml"
-              fi
-              ;;
-          esac
-          
-          # Add SonarCloud organization if provided
-          if [ -n "${{ inputs.sonar_organization }}" ]; then
-            EXTRA_PARAMS="$EXTRA_PARAMS -Dsonar.organization=${{ inputs.sonar_organization }}"
-            echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
+
+      - name: SonarQube/SonarCloud Scan
+        if: steps.check-sonar.outputs.skip == 'false'
+        uses: sonarsource/sonarqube-scan-action@v6
+        with:
+          projectBaseDir: ${{ inputs.working_directory }}
+        env:
+          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
+          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+
+      - name: SonarQube Quality Gate
+        if: steps.check-sonar.outputs.skip == 'false'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          # Read project key from sonar-project.properties
+          if [ -f "sonar-project.properties" ]; then
+            PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2)
+          else
+            # Fallback to generated key if properties file doesn't exist
+            REPO_FULL_NAME="${{ github.repository }}"
+            PROJECT_KEY="${REPO_FULL_NAME//\//_}"
           fi
-          
-          # Run scan
-          sonar-scanner \
-            -Dsonar.projectKey=${{ inputs.app_name }} \
-            -Dsonar.projectName="${{ inputs.app_name }}" \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=${SONAR_HOST_URL} \
-            -Dsonar.login=${SONAR_TOKEN} \
-            -Dsonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
-            -Dsonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
-            $EXTRA_PARAMS
           
           echo "✓ SonarQube/SonarCloud scan completed"
-          echo "📊 View results at: ${SONAR_HOST_URL}/dashboard?id=${{ inputs.app_name }}"
+          echo "📊 View results at: ${{ needs.fetch-secrets.outputs.SONAR_URL }}/dashboard?id=$PROJECT_KEY"

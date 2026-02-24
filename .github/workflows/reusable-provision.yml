@@ -163,10 +163,17 @@ jobs:
             let runner = 'ubuntu-latest';
             
             // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // For reusable workflows, check the calling repository owner
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -174,33 +181,17 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo != `${context.repo.owner}/${context.repo.repo}`) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested and calling from KoraMaple repo, allow it
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ Self-hosted runner requested from ${callingRepo} - allowing`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -214,14 +205,29 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug Tailscale secrets presence
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
+        run: |
+          echo "ID='${{ secrets.TS_OAUTH_CLIENT_ID }}'"
+          echo "SECRET set? ${{ secrets.TS_OAUTH_CLIENT_SECRET != '' }}"
+          if [ -z "${{ secrets.TS_OAUTH_CLIENT_ID }}" ]; then
+            echo "::error::TS_OAUTH_CLIENT_ID is empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.TS_OAUTH_CLIENT_SECRET }}" ]; then
+            echo "::error::TS_OAUTH_CLIENT_SECRET is empty"
+            exit 1
+          fi      
       # Connect to Tailscale for GitHub-hosted runners
       - name: Connect to Tailscale
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
+        uses: tailscale/github-action@v4 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-          tags: ${{ inputs.tailscale_tags }}
+          tags: ${{ inputs.tailscale_tags || 'tag:ci' }}
 
       - name: Validate inputs
         run: |
@@ -292,7 +298,7 @@ jobs:
       # Install Terraform for GitHub-hosted runners (self-hosted runners have it pre-installed)
       - name: Install Terraform
         if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269571cb # v3.1.2
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_wrapper: false
 
@@ -320,6 +326,56 @@ jobs:
             fi
             echo "✓ VLAN $VLAN and IP $IP are valid"
           fi
+
+      - name: Verify Tailscale connectivity to MinIO
+        if: needs.check-runner-access.outputs.runner == 'ubuntu-latest'
+        run: |
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          echo "Verifying Tailscale connectivity to MinIO backend..."
+          
+          # Extract hostname from MINIO_ENDPOINT
+          MINIO_HOST=$(echo "$MINIO_ENDPOINT" | sed -E 's|https?://([^:/]+).*|\1|')
+          
+          if [ -z "$MINIO_HOST" ]; then
+            echo "❌ ERROR: Could not extract MinIO hostname from MINIO_ENDPOINT"
+            echo "MINIO_ENDPOINT: $MINIO_ENDPOINT"
+            exit 1
+          fi
+          
+          echo "MinIO host: $MINIO_HOST"
+          
+          # Check if host is reachable via Tailscale
+          MAX_ATTEMPTS=30
+          CONNECTED=false
+          
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            if ping -c 1 -W 2 "$MINIO_HOST" &>/dev/null; then
+              echo "✓ MinIO host $MINIO_HOST is reachable via Tailscale (attempt $i)"
+              CONNECTED=true
+              break
+            fi
+            echo "Attempt $i/$MAX_ATTEMPTS: Waiting for Tailscale connectivity to $MINIO_HOST..."
+            sleep 2
+          done
+          
+          if [ "$CONNECTED" = false ]; then
+            echo "❌ ERROR: Cannot reach MinIO host $MINIO_HOST via Tailscale after 60 seconds"
+            echo "Check that:"
+            echo "  1. Tailscale connection is active (should have connected in previous step)"
+            echo "  2. MinIO server is running and accessible on your Tailnet"
+            echo "  3. MINIO_ENDPOINT in Doppler is correct: $MINIO_ENDPOINT"
+            echo ""
+            echo "Tailscale status:"
+            tailscale status || echo "Could not get Tailscale status"
+            exit 1
+          fi
+          
+          echo "✓ Tailscale connectivity to MinIO verified"
+          EOF
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Terraform Init, Plan, and Apply
         if: ${{ inputs.skip_terraform != true }}
@@ -440,14 +496,15 @@ jobs:
               VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
               echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
               echo "✓ Multi-instance hostnames retrieved"
+              echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
             else
               # Single-instance mode - check for VM or LXC hostname
               if [ "${{ inputs.resource_type }}" = "lxc" ]; then
                 echo "Extracting lxc_hostname..."
                 VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
               else
-                echo "Extracting vm_hostname..."
-                VM_HOSTNAME=$(terraform output -raw vm_hostname 2>/dev/null || echo "")
+                echo "Extracting vm_hostname from vm_hostnames map..."
+                VM_HOSTNAME=$(terraform output -json vm_hostnames 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null || echo "")
               fi
               if [ -n "$VM_HOSTNAME" ]; then
                 echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
@@ -466,6 +523,14 @@ jobs:
           export TF_VAR_proxmox_api_token_id="$PROXMOX_TOKEN_ID"
           export TF_VAR_proxmox_api_token_secret="$PROXMOX_TOKEN_SECRET"
           export TF_VAR_ssh_public_key="$ANS_SSH_PUBLIC_KEY"
+          
+          # Verify SSH public key is set
+          if [ -z "$ANS_SSH_PUBLIC_KEY" ]; then
+            echo "❌ ERROR: ANS_SSH_PUBLIC_KEY not found in Doppler"
+            echo "This key is required for SSH access to the VM"
+            exit 1
+          fi
+          echo "✓ SSH public key configured for cloud-init (length: ${#ANS_SSH_PUBLIC_KEY} chars)"
           
           # Set Tailscale credentials for Terraform provider
           export TAILSCALE_OAUTH_CLIENT_ID="$TAILSCALE_OAUTH_CLIENT_ID"
@@ -581,7 +646,7 @@ jobs:
             mkdir -p /tmp/tailscale-provision-$$
             cd /tmp/tailscale-provision-$$
             
-            cat > main.tf <<'TSEOF'
+            cat > main.tf <<TSEOF
           terraform {
             required_providers {
               tailscale = {
@@ -604,6 +669,7 @@ jobs:
             preauthorized = true
             expiry        = 7776000  # 90 days
             description   = "Provision key for ${{ inputs.app_name }}"
+            tags          = ["tag:proxmox-vm", "tag:${{ inputs.environment }}"]
           }
           
           output "auth_key" {
@@ -659,101 +725,231 @@ jobs:
           fi
           EOF
 
-      - name: Wait for VM to boot and SSH to be ready
+      - name: Set hostnames when Terraform is skipped
+        if: ${{ inputs.skip_terraform == true }}
         run: |
-          # Determine target IPs based on deployment mode
+          doppler run -- bash <<'EOF'
+          set -e
+          
+          cd terraform/
+          
+          # Set AWS credentials for Terraform S3 backend
+          export AWS_ACCESS_KEY_ID="$MINIO_ROOT_USER"
+          export AWS_SECRET_ACCESS_KEY="$MINIO_ROOT_PASSWORD"
+          
+          # Terraform Init to access state
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="endpoints={s3=\"${MINIO_ENDPOINT}\"}" \
+            -backend-config="access_key=$MINIO_ROOT_USER" \
+            -backend-config="secret_key=$MINIO_ROOT_PASSWORD" \
+            > /dev/null 2>&1
+          
+          # Select workspace
+          terraform workspace select ${{ inputs.app_name }} > /dev/null 2>&1
+          
+          echo "Extracting hostnames from Terraform state..."
+          
+          # Extract hostnames from Terraform outputs
           if [ -n "${{ inputs.instances }}" ]; then
-            # Multi-instance mode - extract IPs from instances JSON
-            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ' ')
-            echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
+            # Multi-instance mode
+            VM_HOSTNAMES_JSON=$(terraform output -json vm_hostnames 2>/dev/null || echo '{}')
+            echo "VM_HOSTNAMES_JSON=$VM_HOSTNAMES_JSON" >> $GITHUB_ENV
+            echo "✓ Multi-instance hostnames retrieved from state"
+            echo "$VM_HOSTNAMES_JSON" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
           else
             # Single-instance mode
-            TARGET_IPS="${{ inputs.vm_target_ip }}"
-            echo "Single-instance mode: waiting for ${{ inputs.resource_type }} at $TARGET_IPS"
-          fi
-          
-          # Wait for each IP
-          for TARGET_IP in $TARGET_IPS; do
-            echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
-          
-          # Wait up to 3 minutes for the resource to respond to ping
-          PING_SUCCESS=false
-          MAX_ATTEMPTS=36
-          # LXC containers boot much faster, reduce wait time
-          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            MAX_ATTEMPTS=12  # 1 minute for LXC
-          fi
-          
-            for i in $(seq 1 $MAX_ATTEMPTS); do
-              if ping -c 1 -W 2 $TARGET_IP &>/dev/null; then
-                echo "✓ ${{ inputs.resource_type }} at $TARGET_IP is responding to ping (attempt $i)"
-                PING_SUCCESS=true
-                break
-              fi
-              echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} at $TARGET_IP not yet reachable, waiting 5s..."
-              sleep 5
-            done
-          
-            if [ "$PING_SUCCESS" = false ]; then
-              echo "❌ ERROR: ${{ inputs.resource_type }} at $TARGET_IP did not respond to ping"
-              echo "Check that:"
-              echo "  1. Resource was created successfully in Proxmox"
-              if [ "${{ inputs.resource_type }}" = "vm" ]; then
-                echo "  2. Cloud-init completed (check VM console)"
-              fi
-              echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-              echo "  4. IP $TARGET_IP is not already in use"
-              exit 1
+            if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+              VM_HOSTNAME=$(terraform output -raw lxc_hostname 2>/dev/null || echo "")
+            else
+              VM_HOSTNAME=$(terraform output -json vm_hostnames 2>/dev/null | jq -r 'to_entries[0].value' 2>/dev/null || echo "")
             fi
-          
-          # Wait for SSH port to be open
-          # LXC containers (especially RHEL-based) may take longer to start SSH
-          if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-            MAX_ATTEMPTS=36  # 3 minutes for LXC
-            echo "Waiting for SSH port 22 (LXC may take up to 3 minutes)..."
-          else
-            MAX_ATTEMPTS=24  # 2 minutes for VMs
-            echo "Waiting for SSH port 22..."
+            
+            if [ -n "$VM_HOSTNAME" ]; then
+              echo "VM_HOSTNAME=$VM_HOSTNAME" >> $GITHUB_ENV
+              echo "✓ Hostname retrieved from state: $VM_HOSTNAME"
+            else
+              echo "⚠️  WARNING: No hostname found in Terraform state"
+              echo "Falling back to app_name: ${{ inputs.app_name }}"
+              echo "VM_HOSTNAME=${{ inputs.app_name }}" >> $GITHUB_ENV
+            fi
           fi
+          EOF
+
+      - name: Wait for VM to boot and SSH to be ready
+        run: |
+          # For GitHub-hosted runners, wait for Tailscale connectivity
+          # For self-hosted runners, wait for local IP connectivity
+          RUNNER_TYPE="${{ needs.check-runner-access.outputs.runner }}"
           
-            SSH_SUCCESS=false
-            for i in $(seq 1 $MAX_ATTEMPTS); do
-              if nc -z -w 2 $TARGET_IP 22 2>/dev/null; then
-                echo "✓ SSH port at $TARGET_IP is open (attempt $i)"
-                SSH_SUCCESS=true
-                break
-              fi
-              echo "Attempt $i/$MAX_ATTEMPTS: SSH at $TARGET_IP not ready, waiting 5s..."
-              sleep 5
-            done
-          
-            if [ "$SSH_SUCCESS" = false ]; then
-              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
-                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 3 minutes"
-                echo "Check that:"
-                echo "  1. LXC container started successfully in Proxmox"
-                echo "  2. SSH service is installed and enabled (systemctl status sshd)"
-                echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
-                echo "  4. Firewall is not blocking port 22"
-              else
-                echo "❌ ERROR: SSH port at $TARGET_IP did not open after 2 minutes"
-                echo "Check that:"
-                echo "  1. Cloud-init completed successfully"
-                echo "  2. SSH service is running"
-                echo "  3. Firewall is not blocking port 22"
-              fi
+          if [ "$RUNNER_TYPE" = "ubuntu-latest" ]; then
+            echo "GitHub-hosted runner detected - will wait for Tailscale connectivity"
+            
+            # Get hostnames from environment
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode
+              HOSTNAMES=$(echo "${{ env.VM_HOSTNAMES_JSON }}" | jq -r '.[] | select(. != null and . != "")' | tr '\n' ' ')
+              echo "Multi-instance mode: waiting for Tailscale hostnames: $HOSTNAMES"
+            else
+              # Single-instance mode
+              HOSTNAMES="${{ env.VM_HOSTNAME }}"
+              echo "Single-instance mode: waiting for Tailscale hostname: $HOSTNAMES"
+            fi
+            
+            if [ -z "$HOSTNAMES" ] || [ "$HOSTNAMES" = "null" ]; then
+              echo "❌ ERROR: No Tailscale hostnames available"
+              echo "VM_HOSTNAME: ${{ env.VM_HOSTNAME }}"
+              echo "VM_HOSTNAMES_JSON: ${{ env.VM_HOSTNAMES_JSON }}"
               exit 1
             fi
             
-            # Additional wait for cloud-init to fully complete (VMs only)
-            if [ "${{ inputs.resource_type }}" = "vm" ]; then
-              echo "Waiting 15s for cloud-init to complete on $TARGET_IP..."
-              sleep 15
-              echo "✓ VM at $TARGET_IP is ready for Ansible configuration"
+            # Wait for each hostname to be reachable via Tailscale
+            for HOSTNAME in $HOSTNAMES; do
+              echo "Waiting for ${{ inputs.resource_type }} at $HOSTNAME to join Tailscale..."
+              
+              # Wait up to 5 minutes for Tailscale connectivity
+              TAILSCALE_SUCCESS=false
+              MAX_ATTEMPTS=60
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if ping -c 1 -W 2 "$HOSTNAME" &>/dev/null; then
+                  echo "✓ $HOSTNAME is reachable via Tailscale (attempt $i)"
+                  TAILSCALE_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: $HOSTNAME not yet on Tailscale, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$TAILSCALE_SUCCESS" = false ]; then
+                echo "❌ ERROR: $HOSTNAME did not join Tailscale after 5 minutes"
+                echo "Check that:"
+                echo "  1. VM/CT was created successfully in Proxmox"
+                echo "  2. Tailscale installation completed (check cloud-init logs)"
+                echo "  3. TAILSCALE_AUTH_KEY is valid"
+                echo "  4. VM/CT has internet connectivity"
+                exit 1
+              fi
+              
+              # Wait for SSH on Tailscale hostname
+              echo "Waiting for SSH on $HOSTNAME..."
+              SSH_SUCCESS=false
+              MAX_ATTEMPTS=24
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if nc -z -w 2 "$HOSTNAME" 22 2>/dev/null; then
+                  echo "✓ SSH port at $HOSTNAME is open (attempt $i)"
+                  SSH_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: SSH at $HOSTNAME not ready, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$SSH_SUCCESS" = false ]; then
+                echo "❌ ERROR: SSH port at $HOSTNAME did not open after 2 minutes"
+                exit 1
+              fi
+              
+              echo "✓ $HOSTNAME is ready for Ansible configuration"
+            done
+          else
+            echo "Self-hosted runner detected - will use local IP connectivity"
+            
+            # Determine target IPs based on deployment mode
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - extract IPs from instances JSON
+              TARGET_IPS=$(echo "${{ inputs.instances }}" | jq -r '.[] | .ip_address' | tr '\n' ' ')
+              echo "Multi-instance mode: waiting for instances at: $TARGET_IPS"
             else
-              echo "✓ LXC container at $TARGET_IP is ready for Ansible configuration"
+              # Single-instance mode
+              TARGET_IPS="${{ inputs.vm_target_ip }}"
+              echo "Single-instance mode: waiting for ${{ inputs.resource_type }} at $TARGET_IPS"
             fi
-          done
+            
+            # Wait for each IP
+            for TARGET_IP in $TARGET_IPS; do
+              echo "Waiting for ${{ inputs.resource_type }} at $TARGET_IP to be reachable..."
+              
+              # Wait up to 3 minutes for the resource to respond to ping
+              PING_SUCCESS=false
+              MAX_ATTEMPTS=36
+              # LXC containers boot much faster, reduce wait time
+              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                MAX_ATTEMPTS=12  # 1 minute for LXC
+              fi
+              
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if ping -c 1 -W 2 $TARGET_IP &>/dev/null; then
+                  echo "✓ ${{ inputs.resource_type }} at $TARGET_IP is responding to ping (attempt $i)"
+                  PING_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: ${{ inputs.resource_type }} at $TARGET_IP not yet reachable, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$PING_SUCCESS" = false ]; then
+                echo "❌ ERROR: ${{ inputs.resource_type }} at $TARGET_IP did not respond to ping"
+                echo "Check that:"
+                echo "  1. Resource was created successfully in Proxmox"
+                if [ "${{ inputs.resource_type }}" = "vm" ]; then
+                  echo "  2. Cloud-init completed (check VM console)"
+                fi
+                echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+                echo "  4. IP $TARGET_IP is not already in use"
+                exit 1
+              fi
+              
+              # Wait for SSH port to be open
+              # LXC containers (especially RHEL-based) may take longer to start SSH
+              if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                MAX_ATTEMPTS=36  # 3 minutes for LXC
+                echo "Waiting for SSH port 22 (LXC may take up to 3 minutes)..."
+              else
+                MAX_ATTEMPTS=24  # 2 minutes for VMs
+                echo "Waiting for SSH port 22..."
+              fi
+              
+              SSH_SUCCESS=false
+              for i in $(seq 1 $MAX_ATTEMPTS); do
+                if nc -z -w 2 $TARGET_IP 22 2>/dev/null; then
+                  echo "✓ SSH port at $TARGET_IP is open (attempt $i)"
+                  SSH_SUCCESS=true
+                  break
+                fi
+                echo "Attempt $i/$MAX_ATTEMPTS: SSH at $TARGET_IP not ready, waiting 5s..."
+                sleep 5
+              done
+              
+              if [ "$SSH_SUCCESS" = false ]; then
+                if [ "${{ inputs.resource_type }}" = "lxc" ]; then
+                  echo "❌ ERROR: SSH port at $TARGET_IP did not open after 3 minutes"
+                  echo "Check that:"
+                  echo "  1. LXC container started successfully in Proxmox"
+                  echo "  2. SSH service is installed and enabled (systemctl status sshd)"
+                  echo "  3. Network configuration is correct (VLAN ${{ inputs.vlan_tag }})"
+                  echo "  4. Firewall is not blocking port 22"
+                else
+                  echo "❌ ERROR: SSH port at $TARGET_IP did not open after 2 minutes"
+                  echo "Check that:"
+                  echo "  1. Cloud-init completed successfully"
+                  echo "  2. SSH service is running"
+                  echo "  3. Firewall is not blocking port 22"
+                fi
+                exit 1
+              fi
+              
+              # Additional wait for cloud-init to fully complete (VMs only)
+              if [ "${{ inputs.resource_type }}" = "vm" ]; then
+                echo "Waiting 15s for cloud-init to complete on $TARGET_IP..."
+                sleep 15
+                echo "✓ VM at $TARGET_IP is ready for Ansible configuration"
+              else
+                echo "✓ LXC container at $TARGET_IP is ready for Ansible configuration"
+              fi
+            done
+          fi
 
       - name: Run Ansible with Doppler
         env:
@@ -771,27 +967,57 @@ jobs:
           eval $(ssh-agent -s)
           echo "$SSH_PRIVATE_KEY" | ssh-add -
           
+          # Show SSH key fingerprint for debugging
+          echo "SSH key fingerprint being used:"
+          ssh-add -l
+          
           cd ansible/
           
           # Install requirements
           ansible-galaxy install -r requirements.yml
           
-          # Determine target IPs for Ansible
-          if [ -n "${{ inputs.instances }}" ]; then
-            # Multi-instance mode - build inventory from instances
-            TARGET_IPS=$(echo '${{ inputs.instances }}' | jq -r '.[] | .ip_address' | tr '\n' ',')
-            INVENTORY="${TARGET_IPS}"
-            echo "Multi-instance inventory: $INVENTORY"
-          else
-            # Single-instance mode
-            INVENTORY="${{ inputs.vm_target_ip }},"
-            echo "Single-instance inventory: $INVENTORY"
-          fi
+          # Determine Ansible inventory based on runner type
+          RUNNER_TYPE="${{ needs.check-runner-access.outputs.runner }}"
           
-          # Clean up old SSH host keys to prevent conflicts
-          for IP in $(echo "$INVENTORY" | tr ',' ' '); do
-            [ -n "$IP" ] && ssh-keygen -R "$IP" 2>/dev/null || true
-          done
+          if [ "$RUNNER_TYPE" = "ubuntu-latest" ]; then
+            echo "GitHub-hosted runner - using Tailscale hostnames for Ansible"
+            
+            # Use Tailscale hostnames instead of IPs
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - build inventory from hostnames
+              HOSTNAMES=$(echo "${{ env.VM_HOSTNAMES_JSON }}" | jq -r '.[] | select(. != null and . != "")' | tr '\n' ',')
+              INVENTORY="${HOSTNAMES}"
+              echo "Multi-instance inventory (Tailscale): $INVENTORY"
+            else
+              # Single-instance mode
+              INVENTORY="${{ env.VM_HOSTNAME }},"
+              echo "Single-instance inventory (Tailscale): $INVENTORY"
+            fi
+            
+            # Clean up old SSH host keys for Tailscale hostnames
+            for HOST in $(echo "$INVENTORY" | tr ',' ' '); do
+              [ -n "$HOST" ] && ssh-keygen -R "$HOST" 2>/dev/null || true
+            done
+          else
+            echo "Self-hosted runner - using local IP addresses for Ansible"
+            
+            # Use local IPs
+            if [ -n "${{ inputs.instances }}" ]; then
+              # Multi-instance mode - build inventory from instances
+              TARGET_IPS=$(echo "${{ inputs.instances }}" | jq -r '.[] | .ip_address' | tr '\n' ',')
+              INVENTORY="${TARGET_IPS}"
+              echo "Multi-instance inventory (local): $INVENTORY"
+            else
+              # Single-instance mode
+              INVENTORY="${{ inputs.vm_target_ip }},"
+              echo "Single-instance inventory (local): $INVENTORY"
+            fi
+            
+            # Clean up old SSH host keys for IPs
+            for IP in $(echo "$INVENTORY" | tr ',' ' '); do
+              [ -n "$IP" ] && ssh-keygen -R "$IP" 2>/dev/null || true
+            done
+          fi
           
           # Determine Ansible user based on resource type
           # VMs use cloud-init to create 'deploy' user
@@ -855,7 +1081,7 @@ jobs:
           # Get VM hostnames from environment (set in previous step)
           if [ -n "${{ inputs.instances }}" ]; then
             # Multi-instance mode - hostnames are in JSON map
-            VM_HOSTNAMES_JSON='${{ env.VM_HOSTNAMES_JSON }}'
+            VM_HOSTNAMES_JSON="${{ env.VM_HOSTNAMES_JSON }}"
             echo "✓ Using multi-instance hostnames from Terraform"
           else
             # Single-instance mode
