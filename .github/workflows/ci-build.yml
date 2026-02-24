@@ -196,7 +196,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Connect to Tailscale
-        if: inputs.use_tailscale == true
+        if: inputs.use_tailscale == true && needs.check-runner-access.outputs.runner == 'ubuntu-latest'
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
           oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
@@ -480,7 +480,7 @@ jobs:
     if: inputs.run_sonar_scan == true
     steps:
       - name: Connect to Tailscale
-        if: inputs.use_tailscale == true
+        if: inputs.use_tailscale == true && needs.check-runner-access.outputs.runner == 'ubuntu-latest'
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
           oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
