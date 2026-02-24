@@ -164,8 +164,9 @@ jobs:
           set -e
           
           # Mask sensitive values to prevent log exposure
+          # Note: SONAR_TOKEN is NOT masked here so it can be passed via job outputs
+          # It will be masked in the consuming jobs instead
           if [ -n "$NEXUS_PASSWORD" ]; then echo "::add-mask::$NEXUS_PASSWORD"; fi
-          if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
           if [ -n "$TAILSCALE_OAUTH_CLIENT_ID" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_ID"; fi
           if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
           
@@ -527,6 +528,9 @@ jobs:
           SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
         run: |
           set -e
+          
+          # Mask SONAR_TOKEN to prevent log exposure
+          if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
           
           # Check if SonarQube/SonarCloud credentials are available
           if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
