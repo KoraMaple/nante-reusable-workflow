@@ -521,76 +521,76 @@ jobs:
           java-version: ${{ inputs.language_version || '17' }}
           distribution: 'temurin'
 
-      - name: SonarQube/SonarCloud Scan
-        working-directory: ${{ inputs.working_directory }}
-        env:
-          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
-          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+      - name: Check SonarQube credentials
+        id: check-sonar
         run: |
-          set -e
-          
-          # Mask SONAR_TOKEN to prevent log exposure
-          if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
-          
-          # Check if SonarQube/SonarCloud credentials are available
-          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
+          if [ -z "${{ needs.fetch-secrets.outputs.SONAR_URL }}" ] || [ -z "${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
             echo "⚠️  WARNING: SonarQube/SonarCloud credentials not found in Doppler"
             echo "Skipping code scan. To enable:"
             echo "  - Self-hosted SonarQube: Add SONAR_URL and SONAR_TOKEN to Doppler"
             echo "  - SonarCloud: Set SONAR_URL=https://sonarcloud.io and add SONAR_TOKEN to Doppler"
-            exit 0
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "✓ SonarQube credentials found"
           fi
-          
-          echo "🔍 Running SonarQube/SonarCloud scan..."
-          
-          # Install sonar-scanner if not available
-          if ! command -v sonar-scanner &> /dev/null; then
-            echo "Installing sonar-scanner..."
-            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-            unzip -q sonar-scanner-cli-5.0.1.3006-linux.zip
-            export PATH="$PWD/sonar-scanner-5.0.1.3006-linux/bin:$PATH"
-            echo "✓ sonar-scanner installed"
+
+      - name: Create sonar-project.properties
+        if: steps.check-sonar.outputs.skip == 'false'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          # Create sonar-project.properties if it doesn't exist
+          if [ ! -f "sonar-project.properties" ]; then
+            echo "Creating sonar-project.properties..."
+            cat > sonar-project.properties <<EOF
+          sonar.projectKey=${{ inputs.app_name }}
+          sonar.projectName=${{ inputs.app_name }}
+          sonar.sources=.
+          sonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/**
+          sonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/**
+          EOF
+            
+            # Add language-specific coverage paths
+            case "${{ inputs.language }}" in
+              go)
+                if [ -f "coverage.out" ]; then
+                  echo "sonar.go.coverage.reportPaths=coverage.out" >> sonar-project.properties
+                fi
+                ;;
+              python)
+                if [ -f "coverage.xml" ]; then
+                  echo "sonar.python.coverage.reportPaths=coverage.xml" >> sonar-project.properties
+                fi
+                ;;
+              java)
+                if [ -d "target/site/jacoco" ]; then
+                  echo "sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml" >> sonar-project.properties
+                fi
+                ;;
+            esac
+            
+            # Add SonarCloud organization if provided
+            if [ -n "${{ inputs.sonar_organization }}" ]; then
+              echo "sonar.organization=${{ inputs.sonar_organization }}" >> sonar-project.properties
+              echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
+            fi
+            
+            echo "✓ Generated sonar-project.properties"
+          else
+            echo "✓ Using existing sonar-project.properties"
           fi
-          
-          # Prepare language-specific parameters
-          EXTRA_PARAMS=""
-          case "${{ inputs.language }}" in
-            go)
-              # Add Go coverage if available
-              if [ -f "coverage.out" ]; then
-                EXTRA_PARAMS="-Dsonar.go.coverage.reportPaths=coverage.out"
-              fi
-              ;;
-            python)
-              # Add Python coverage if available
-              if [ -f "coverage.xml" ]; then
-                EXTRA_PARAMS="-Dsonar.python.coverage.reportPaths=coverage.xml"
-              fi
-              ;;
-            java)
-              # Maven/Gradle generate coverage automatically
-              if [ -d "target/site/jacoco" ]; then
-                EXTRA_PARAMS="-Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml"
-              fi
-              ;;
-          esac
-          
-          # Add SonarCloud organization if provided
-          if [ -n "${{ inputs.sonar_organization }}" ]; then
-            EXTRA_PARAMS="$EXTRA_PARAMS -Dsonar.organization=${{ inputs.sonar_organization }}"
-            echo "✓ Using SonarCloud organization: ${{ inputs.sonar_organization }}"
-          fi
-          
-          # Run scan
-          sonar-scanner \
-            -Dsonar.projectKey=${{ inputs.app_name }} \
-            -Dsonar.projectName="${{ inputs.app_name }}" \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=${SONAR_HOST_URL} \
-            -Dsonar.login=${SONAR_TOKEN} \
-            -Dsonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
-            -Dsonar.test.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/** \
-            $EXTRA_PARAMS
-          
+
+      - name: SonarQube/SonarCloud Scan
+        if: steps.check-sonar.outputs.skip == 'false'
+        uses: sonarsource/sonarqube-scan-action@v4.0.0
+        with:
+          projectBaseDir: ${{ inputs.working_directory }}
+        env:
+          SONAR_HOST_URL: ${{ needs.fetch-secrets.outputs.SONAR_URL }}
+          SONAR_TOKEN: ${{ needs.fetch-secrets.outputs.SONAR_TOKEN }}
+
+      - name: SonarQube Quality Gate
+        if: steps.check-sonar.outputs.skip == 'false'
+        run: |
           echo "✓ SonarQube/SonarCloud scan completed"
-          echo "📊 View results at: ${SONAR_HOST_URL}/dashboard?id=${{ inputs.app_name }}"
+          echo "📊 View results at: ${{ needs.fetch-secrets.outputs.SONAR_URL }}/dashboard?id=${{ inputs.app_name }}"
