@@ -81,11 +81,6 @@ on:
         required: true
       DOPPLER_TARGET_CONFIG:
         required: true
-      # Optional: Required for GitHub-hosted runners with Tailscale
-      TS_OAUTH_CLIENT_ID:
-        required: false
-      TS_OAUTH_CLIENT_SECRET:
-        required: false
 
 jobs:
   check-runner-access:
@@ -104,11 +99,18 @@ jobs:
             // Default to github-hosted
             let runner = 'ubuntu-latest';
             
-            // SECURITY: Block external callers from using self-hosted runners
-            // This protects against old commit SHA references
-            if (context.repo.owner !== 'KoraMaple' || context.repo.repo !== 'nante-reusable-workflow') {
+            // SECURITY: Check the calling repository owner
+            // For reusable workflows, context.payload.repository is the calling repo
+            const callingRepo = context.payload.repository?.full_name || '';
+            const callingOwner = callingRepo.split('/')[0];
+            
+            core.info(`Calling repository: ${callingRepo}`);
+            core.info(`Calling owner: ${callingOwner}`);
+            
+            // Only allow KoraMaple org repositories to use self-hosted runners
+            if (callingOwner !== 'KoraMaple') {
               core.warning('⚠️ External workflow call detected - forcing github-hosted runner for security');
-              core.warning(`Called from: ${context.repo.owner}/${context.repo.repo}`);
+              core.warning(`Called from: ${callingRepo}`);
               core.setOutput('runner', 'ubuntu-latest');
               return;
             }
@@ -116,33 +118,17 @@ jobs:
             // Block fork PRs from self-hosted
             if (context.eventName === 'pull_request' || context.eventName === 'pull_request_target') {
               const prRepo = context.payload.pull_request?.head?.repo?.full_name;
-              if (prRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+              if (prRepo !== callingRepo) {
                 core.warning('Fork PRs use GitHub-hosted runners only');
                 core.setOutput('runner', 'ubuntu-latest');
                 return;
               }
             }
             
-            // If self-hosted requested, verify org membership
+            // If self-hosted requested, allow it for KoraMaple repos
             if (requestedRunner === 'self-hosted') {
-              if (context.repo.owner !== 'KoraMaple') {
-                core.warning('Self-hosted only available for KoraMaple org repos');
-                core.setOutput('runner', 'ubuntu-latest');
-                return;
-              }
-              
-              try {
-                const { data } = await github.rest.orgs.getMembershipForUser({
-                  org: 'KoraMaple',
-                  username: context.actor
-                });
-                if (data.state === 'active') {
-                  core.info(`✓ ${context.actor} is KoraMaple org member - self-hosted allowed`);
-                  runner = 'self-hosted';
-                }
-              } catch (e) {
-                core.warning(`${context.actor} is not a KoraMaple org member - using GitHub-hosted`);
-              }
+              core.info(`✓ ${callingRepo} is a KoraMaple repository - self-hosted allowed`);
+              runner = 'self-hosted';
             }
             
             core.setOutput('runner', runner);
@@ -157,6 +143,8 @@ jobs:
       NEXUS_PASSWORD: ${{ steps.get-secrets.outputs.NEXUS_PASSWORD }}
       SONAR_URL: ${{ steps.get-secrets.outputs.SONAR_URL }}
       SONAR_TOKEN: ${{ steps.get-secrets.outputs.SONAR_TOKEN }}
+      TS_OAUTH_CLIENT_ID: ${{ steps.get-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_CLIENT_SECRET: ${{ steps.get-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
     steps:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3 # v3
@@ -178,6 +166,8 @@ jobs:
           # Mask sensitive values to prevent log exposure
           if [ -n "$NEXUS_PASSWORD" ]; then echo "::add-mask::$NEXUS_PASSWORD"; fi
           if [ -n "$SONAR_TOKEN" ]; then echo "::add-mask::$SONAR_TOKEN"; fi
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_ID" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_ID"; fi
+          if [ -n "$TAILSCALE_OAUTH_CLIENT_SECRET" ]; then echo "::add-mask::$TAILSCALE_OAUTH_CLIENT_SECRET"; fi
           
           # Export secrets as outputs (passwords are masked above)
           echo "NEXUS_URL=${NEXUS_URL:-}" >> $GITHUB_OUTPUT
@@ -185,6 +175,8 @@ jobs:
           echo "NEXUS_PASSWORD=${NEXUS_PASSWORD:-}" >> $GITHUB_OUTPUT
           echo "SONAR_URL=${SONAR_URL:-}" >> $GITHUB_OUTPUT
           echo "SONAR_TOKEN=${SONAR_TOKEN:-}" >> $GITHUB_OUTPUT
+          echo "TS_OAUTH_CLIENT_ID=${TAILSCALE_OAUTH_CLIENT_ID:-}" >> $GITHUB_OUTPUT
+          echo "TS_OAUTH_CLIENT_SECRET=${TAILSCALE_OAUTH_CLIENT_SECRET:-}" >> $GITHUB_OUTPUT
           
           # Log what was found (without values)
           [ -n "${NEXUS_URL:-}" ] && echo "✓ NEXUS_URL found" || echo "⚠️  NEXUS_URL not found"
@@ -192,6 +184,8 @@ jobs:
           [ -n "${NEXUS_PASSWORD:-}" ] && echo "✓ NEXUS_PASSWORD found" || echo "⚠️  NEXUS_PASSWORD not found"
           [ -n "${SONAR_URL:-}" ] && echo "✓ SONAR_URL found" || echo "⚠️  SONAR_URL not found"
           [ -n "${SONAR_TOKEN:-}" ] && echo "✓ SONAR_TOKEN found" || echo "⚠️  SONAR_TOKEN not found"
+          [ -n "${TAILSCALE_OAUTH_CLIENT_ID:-}" ] && echo "✓ TAILSCALE_OAUTH_CLIENT_ID found" || echo "⚠️  TAILSCALE_OAUTH_CLIENT_ID not found"
+          [ -n "${TAILSCALE_OAUTH_CLIENT_SECRET:-}" ] && echo "✓ TAILSCALE_OAUTH_CLIENT_SECRET found" || echo "⚠️  TAILSCALE_OAUTH_CLIENT_SECRET not found"
           EOF
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -205,8 +199,8 @@ jobs:
         if: inputs.use_tailscale == true
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
       - name: Validate inputs
@@ -489,8 +483,8 @@ jobs:
         if: inputs.use_tailscale == true
         uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          oauth-client-id: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ needs.fetch-secrets.outputs.TS_OAUTH_CLIENT_SECRET }}
           tags: ${{ inputs.tailscale_tags }}
 
       - name: Checkout caller repository
