@@ -542,8 +542,15 @@ jobs:
           # Create sonar-project.properties if it doesn't exist
           if [ ! -f "sonar-project.properties" ]; then
             echo "Creating sonar-project.properties..."
+            
+            # Extract org and repo from GitHub context
+            REPO_FULL_NAME="${{ github.repository }}"
+            PROJECT_KEY="${REPO_FULL_NAME//\//_}"
+            
+            echo "Using project key: $PROJECT_KEY"
+            
             cat > sonar-project.properties <<EOF
-          sonar.projectKey=${{ inputs.app_name }}
+          sonar.projectKey=$PROJECT_KEY
           sonar.projectName=${{ inputs.app_name }}
           sonar.sources=.
           sonar.coverage.exclusions=**/*_test.go,**/test/**,**/tests/**,**/__tests__/**
@@ -591,6 +598,16 @@ jobs:
 
       - name: SonarQube Quality Gate
         if: steps.check-sonar.outputs.skip == 'false'
+        working-directory: ${{ inputs.working_directory }}
         run: |
+          # Read project key from sonar-project.properties
+          if [ -f "sonar-project.properties" ]; then
+            PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2)
+          else
+            # Fallback to generated key if properties file doesn't exist
+            REPO_FULL_NAME="${{ github.repository }}"
+            PROJECT_KEY="${REPO_FULL_NAME//\//_}"
+          fi
+          
           echo "✓ SonarQube/SonarCloud scan completed"
-          echo "📊 View results at: ${{ needs.fetch-secrets.outputs.SONAR_URL }}/dashboard?id=${{ inputs.app_name }}"
+          echo "📊 View results at: ${{ needs.fetch-secrets.outputs.SONAR_URL }}/dashboard?id=$PROJECT_KEY"
