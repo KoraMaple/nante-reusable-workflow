@@ -345,12 +345,20 @@ jobs:
         run: |
           BUILD_TOOL="${{ inputs.build_tool || 'npm' }}"
           if [ "$BUILD_TOOL" == "yarn" ]; then
-            yarn test
+            yarn run test:cov
           elif [ "$BUILD_TOOL" == "pnpm" ]; then
-            pnpm test
+            pnpm run test:cov
           else
-            npm test
+            npm run test:cov
           fi
+
+      - name: Upload coverage report (Node)
+        if: inputs.language == 'node' && inputs.run_tests == true && inputs.run_sonar_scan == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-report
+          path: ${{ inputs.working_directory }}/coverage/lcov.info
+          retention-days: 1
 
       - name: Build Node
         if: inputs.language == 'node'
@@ -507,6 +515,13 @@ jobs:
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: ${{ inputs.language_version || '3.11' }}
+
+      - name: Download coverage report (Node)
+        if: inputs.language == 'node'
+        uses: actions/download-artifact@v4
+        with:
+          name: lcov-report
+          path: ${{ inputs.working_directory }}/coverage
 
       - name: Setup Node for analysis
         if: inputs.language == 'node'
